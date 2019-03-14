@@ -5,6 +5,8 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 from torch.utils.data.dataloader import DataLoader
+from tqdm.autonotebook import tqdm, trange
+
 
 @dataclass
 class Learner:
@@ -14,13 +16,14 @@ class Learner:
     opt: optim.Optimizer
 
     def train(self, epochs):
-        for epoch in range(epochs):
-            for iteration, batch in enumerate(self.train_dl):
+        for epoch in trange(epochs, desc="Overall Training:"):
+            for iteration, batch in enumerate(tqdm(self.train_dl, desc="Current Batch:", leave=False)):
                 self.opt.zero_grad()
                 output = self.model(batch[0])
                 loss = self.loss_fn(output, batch[1])
                 loss.backward()
                 self.opt.step()
+            tqdm.write(f"{loss.item()}")
 
 
 
