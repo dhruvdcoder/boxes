@@ -53,7 +53,7 @@ class Learner:
                     c.batch_begin(self)
                 self.opt.zero_grad()
                 self.output = self.model(batch[0])
-                self.loss = self.loss_fn(self.output, batch[1], self)
+                self.loss = self.loss_fn(self.output, batch[1], "train", self)
                 self.loss.backward()
                 self.opt.step()
                 for c in self.callbacks:
@@ -84,7 +84,7 @@ class LossCallback(Callback):
     ds: Dataset
     name: str = "Loss"
 
-    def learner_post_init(self, l):
+    def learner_post_init(self, l:Learner):
         if "loss" not in l.metadata.keys():
             l.metadata["loss"] = pd.DataFrame()
         name = self.name
@@ -99,7 +99,7 @@ class LossCallback(Callback):
         with torch.no_grad():
             data = self.ds[:]
             output = l.model(data[0])
-            loss = l.loss_fn(output, data[1])
+            loss = l.loss_fn(output, data[1], self.name, l)
             l.metadata["loss"] = l.metadata["loss"].combine_first(
                 pd.DataFrame({self.name: loss.item()}, [l.progress.current_epoch_iter])
             )

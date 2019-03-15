@@ -7,9 +7,5 @@ class TestDeltaBoxes(unittest.TestCase):
         boxes = DeltaBoxes(1,4,2)
 
 
-    def test_floating_point(self):
-
-
-
 if __name__ == '__main__':
     unittest.main()

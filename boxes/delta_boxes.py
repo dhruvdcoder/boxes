@@ -22,8 +22,8 @@ class DeltaBoxes(nn.Module):
         else:
             return self.z[:,ids] + torch.exp(self.logdelta[:,ids])
 
-    def calc_dim_scales(z, logdelta):
-        max_Z, _ = torch.max(z + torch.exp(logdelta), dim=1)
-        min_z, _ = torch.min(z, dim=1)
-        self.dim_scales = max_Z - min_z
-        return self.dim_scales
+    # def calc_dim_scales(self, z, logdelta):
+    #     max_Z, _ = torch.max(z + torch.exp(logdelta), dim=1)
+    #     min_z, _ = torch.min(z, dim=1)
+    #     self.dim_scales = max_Z - min_z
+    #     return self.dim_scales
