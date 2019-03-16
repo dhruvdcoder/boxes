@@ -86,7 +86,6 @@ class Callback:
         pass
 
 
-
 @dataclass
 class GradientClipping(Callback):
     min: float = None
@@ -108,6 +107,7 @@ class MinBoxSize(Callback):
             if small_boxes.sum() > 0:
                 learner.model.boxes.boxes[:,:,1][small_boxes] = learner.model.boxes.boxes[:,:,0][small_boxes] + self.min_vol ** (
                         1 / learner.model.boxes.boxes.shape[-1])
+
 
 @dataclass
 class LossCallback(Callback):
