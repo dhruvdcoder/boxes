@@ -16,6 +16,7 @@ def load_numpy_num_lines(path, num = "all", dtype=np.float):
         n = np.loadtxt(f, dtype=dtype)
     return n
 
+
 class Probs(TensorDataset):
     """Pairwise Probability dataset"""
 
@@ -23,6 +24,14 @@ class Probs(TensorDataset):
         super().__init__(ids, probs)
         self.ids = ids
         self.probs = probs
+
+    def to(self, *args, **kwargs):
+        self.ids = self.ids.to(*args, **kwargs)
+        self.probs = self.probs.to(*args, **kwargs)
+        # Now we need to make sure the self.tensors attribute points to the right versions.
+        # The easiest way is to just reinitialize.
+        super().__init__(self.ids, self.probs)
+        return self
 
     @classmethod
     def load_from_tsv(cls, path: str, filename: str) -> Probs:
