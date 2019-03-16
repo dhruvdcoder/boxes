@@ -98,6 +98,18 @@ class GradientClipping(Callback):
 
 
 @dataclass
+class MinBoxSize(Callback):
+    """Prevents boxes from getting too small during training."""
+    min_vol: float = 1e-20
+
+    def on_batch_end(self, learner: Learner):
+        with torch.no_grad():
+            small_boxes = learner.model.vol(learner.model.boxes.boxes) < self.min_vol
+            if small_boxes.sum() > 0:
+                learner.model.boxes.boxes[:,:,1][small_boxes] = learner.model.boxes.boxes[:,:,0][small_boxes] + self.min_vol ** (
+                        1 / learner.model.boxes.boxes.shape[-1])
+
+@dataclass
 class LossCallback(Callback):
     recorder: Recorder
     ds: Dataset
