@@ -38,10 +38,8 @@ class LossPieces:
         """
         self.recorder = recorder
         self.loss_funcs = func_list_to_dict(loss_funcs)
-        self.recorder.data["LossPieces"] = defaultdict(pd.DataFrame)
-        self.r = self.recorder.data["LossPieces"]
 
-    def loss_func(self, model_out: Tensor, true_out: Tensor, name: str = "default", learner: Learner = None) -> Tensor:
+    def loss_func(self, model_out: Tensor, true_out: Tensor, section: str = "LossPieces", learner: Learner = None) -> Tensor:
         """
         Weighted sum of all loss functions. Tracks values in learner.
 
@@ -51,11 +49,11 @@ class LossPieces:
             torch.set_grad_enabled(False)
         try:
             loss_pieces = {k: l(model_out, true_out) for k, l in self.loss_funcs.items()}
+            # Note: don't want to detach / move / unwrap tensors here because we have to sum the loss first:
             loss = sum(loss_pieces.values())
             loss_pieces['loss'] = loss
-            loss_pieces = {k: [t.detach().cpu().item()] for k, t in loss_pieces.items()}
-            self.r[name] = self.r[name].append(
-                pd.DataFrame(loss_pieces, [learner.progress.partial_epoch_progress()]), sort=False)
+            loss_pieces = {k: t.detach().cpu().item() for k, t in loss_pieces.items()}
+            self.recorder.update_(section, loss_pieces, learner.progress.partial_epoch_progress())
         finally:
             torch.set_grad_enabled(grad_status)
         return loss

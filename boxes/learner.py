@@ -7,6 +7,7 @@ import torch.nn as nn
 import pandas as pd
 from torch.utils.data import DataLoader, Dataset
 from tqdm.autonotebook import tqdm, trange
+from collections import defaultdict
 
 
 @dataclass
@@ -114,28 +115,38 @@ class LossCallback(Callback):
     recorder: Recorder
     ds: Dataset
     name: str = "Loss"
+    section: str = "LossCallback"
 
     def __post_init__(self):
-        if "loss" not in self.recorder.data.keys():
-            self.recorder.data["loss"] = pd.DataFrame()
-        name = self.name
-        i = 1
-        while name in self.recorder.data["loss"].columns:
-            name = f"{self.name} ({i})"
-            i += 1
-        self.name = name
-        self.recorder.data["loss"][self.name] = []
+        self.name = self.recorder.get_unique_name(self.section, self.name)
 
     def epoch_end(self, l: Learner):
         with torch.no_grad():
             data_in, data_out = self.ds[:]
             output = l.model(data_in)
             loss = l.loss_fn(output, data_out, self.name, l)
-            self.recorder.data["loss"] = self.recorder.data["loss"].combine_first(
-                pd.DataFrame({self.name: loss.item()}, [l.progress.current_epoch_iter])
-            )
+            self.recorder.update_(self.section, {self.name: loss.item()}, l.progress.current_epoch_iter)
 
 
 @dataclass
 class Recorder:
-    data: Dict[str, Any] = field(default_factory=dict)
+    _data: Dict[str, pd.DataFrame] = field(default_factory=lambda: defaultdict(pd.DataFrame))
+
+    def update_(self, section:str, data: Dict[str, Any], index: Union[int, float]):
+        self[section] = self[section].combine_first(
+            pd.DataFrame(data, [index])
+        )
+
+    def get_unique_name(self, section:str, name:str):
+        i = 1
+        while name in self[section].columns:
+            name = f"{name}_{i}"
+            i += 1
+        self[section][name] = [] # adds this column to DataFrame
+        return name
+
+    def __getitem__(self, name:str):
+        return self._data[name]
+
+    def __setitem__(self, name:str, val:pd.DataFrame):
+        self._data[name] = val
