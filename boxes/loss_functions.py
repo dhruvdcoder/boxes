@@ -3,7 +3,6 @@ from torch import Tensor
 import torch.nn.functional as F
 from typing import *
 from .learner import Learner, Recorder
-from dataclasses import dataclass
 from collections import OrderedDict, defaultdict
 import pandas as pd
 
@@ -77,11 +76,7 @@ def mean_cond_kl_loss(model_out, target, eps=1e-38):
 
 
 def kl_div_sym(p, q, eps=1e-38):
-    p = p.clamp(1e-7, 1-1e-7)
     return kl_div_term(p,q, eps) + kl_div_term(1-p, 1-q, eps)
-
-# return F.kl_div(torch.log(p.clamp_min(eps)), q.clamp_min(eps), reduction="none") + \
-#        F.kl_div(torch.log((1 - p).clamp_min(eps)), (1 - q).clamp_min(eps), reduction="none")
 
 
 def kl_div_term(p, q, eps=1e-38):

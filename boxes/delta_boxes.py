@@ -1,6 +1,5 @@
 import torch
 from torch.nn import Module, Parameter
-import torch.nn.functional as F
 
 
 class DeltaBoxes(Module):
