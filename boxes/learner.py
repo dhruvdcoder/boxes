@@ -57,6 +57,8 @@ class Learner:
                 self.model_output = self.model(self.batch_in)
                 self.loss = self.loss_fn(self.model_output, self.batch_out, "train", self)
                 self.loss.backward()
+                for c in self.callbacks:
+                    c.backward_end(self)
                 self.opt.step()
                 for c in self.callbacks:
                     c.batch_end(self)
@@ -65,20 +67,34 @@ class Learner:
 
 
 class Callback:
-    def learner_post_init(self, learner:Learner):
+    def learner_post_init(self, learner: Learner):
         pass
 
-    def epoch_begin(self, learner:Learner):
+    def epoch_begin(self, learner: Learner):
         pass
 
-    def batch_begin(self, learner:Learner):
+    def batch_begin(self, learner: Learner):
         pass
 
-    def batch_end(self, learner:Learner):
+    def backward_end(self, learner: Learner):
         pass
 
-    def epoch_end(self, learner:Learner):
+    def batch_end(self, learner: Learner):
         pass
+
+    def epoch_end(self, learner: Learner):
+        pass
+
+
+
+@dataclass
+class GradientClipping(Callback):
+    min: float = None
+    max: float = None
+
+    def backward_end(self, learner: Learner):
+        for param in learner.model.parameters():
+            param.grad = param.grad.clamp(self.min, self.max)
 
 
 @dataclass
