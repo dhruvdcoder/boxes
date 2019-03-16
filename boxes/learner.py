@@ -22,7 +22,7 @@ class Progress:
             self.current_epoch_iter += 1
 
     def percent_epoch_complete(self):
-        return self.current_batch_iter / num_batches
+        return self.current_batch_iter / self.num_batches
 
     def partial_epoch_progress(self):
         return self.current_epoch_iter + self.percent_epoch_complete()
@@ -44,16 +44,18 @@ class Learner:
             c.learner_post_init(self)
 
     def train(self, epochs):
+        self.status = "train"
         for epoch in trange(epochs, desc="Overall Training:"):
             for c in self.callbacks:
                 c.epoch_begin(self)
             for iteration, batch in enumerate(tqdm(self.train_dl, desc="Current Batch:", leave=False)):
+                self.batch_in, self.batch_out = batch
                 self.progress.increment()
                 for c in self.callbacks:
                     c.batch_begin(self)
                 self.opt.zero_grad()
-                self.output = self.model(batch[0])
-                self.loss = self.loss_fn(self.output, batch[1], "train", self)
+                self.model_output = self.model(self.batch_in)
+                self.loss = self.loss_fn(self.model_output, self.batch_out, "train", self)
                 self.loss.backward()
                 self.opt.step()
                 for c in self.callbacks:
@@ -81,25 +83,31 @@ class Callback:
 
 @dataclass
 class LossCallback(Callback):
+    recorder: Recorder
     ds: Dataset
     name: str = "Loss"
 
-    def learner_post_init(self, l:Learner):
-        if "loss" not in l.metadata.keys():
-            l.metadata["loss"] = pd.DataFrame()
+    def __post_init__(self):
+        if "loss" not in self.recorder.data.keys():
+            self.recorder.data["loss"] = pd.DataFrame()
         name = self.name
         i = 1
-        while name in l.metadata["loss"].columns:
+        while name in self.recorder.data["loss"].columns:
             name = f"{self.name} ({i})"
             i += 1
         self.name = name
-        l.metadata["loss"][self.name] = []
+        self.recorder.data["loss"][self.name] = []
 
-    def epoch_end(self, l):
+    def epoch_end(self, l: Learner):
         with torch.no_grad():
-            data = self.ds[:]
-            output = l.model(data[0])
-            loss = l.loss_fn(output, data[1], self.name, l)
-            l.metadata["loss"] = l.metadata["loss"].combine_first(
+            data_in, data_out = self.ds[:]
+            output = l.model(data_in)
+            loss = l.loss_fn(output, data_out, self.name, l)
+            self.recorder.data["loss"] = self.recorder.data["loss"].combine_first(
                 pd.DataFrame({self.name: loss.item()}, [l.progress.current_epoch_iter])
             )
+
+
+@dataclass
+class Recorder:
+    data: Dict[str, Any] = field(default_factory=dict)
