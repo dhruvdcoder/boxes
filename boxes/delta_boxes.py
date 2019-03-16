@@ -5,12 +5,12 @@ import torch.nn.functional as F
 
 class DeltaBoxes(Module):
 
-    def __init__(self, num_models: int, num_boxes: int, dim: int):
+    def __init__(self, num_models: int, num_boxes: int, dim: int, **kwargs):
         super().__init__()
         self.z = Parameter(torch.rand(num_models, num_boxes, dim))
         self.logdelta = Parameter(torch.rand(num_models, num_boxes, dim))
 
-    def min(self, ids=slice(None, None, None), scaled = False):
+    def min(self, ids=slice(None, None, None), scaled = False, **kwargs):
         z = self.z[:, ids]
         if scaled:
             min_z, dim_scales = self.calc_dim_scales()
@@ -19,7 +19,7 @@ class DeltaBoxes(Module):
             return z
 
 
-    def max(self, ids=slice(None, None, None), scaled = False):
+    def max(self, ids=slice(None, None, None), scaled = False, **kwargs):
         Z = self.z[:, ids] + torch.exp(self.logdelta[:, ids])
         if scaled:
             min_z, dim_scales = self.calc_dim_scales()
