@@ -3,8 +3,7 @@ from torch import Tensor
 import torch.nn.functional as F
 from typing import *
 from .learner import Learner, Recorder
-from collections import OrderedDict, defaultdict
-import pandas as pd
+from collections import OrderedDict
 
 
 def func_list_to_dict(func_list) -> Dict[str, Callable]:
