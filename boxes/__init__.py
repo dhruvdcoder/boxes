@@ -15,12 +15,19 @@ import pandas as pd
 #   https://github.com/tqdm/tqdm/issues/433
 # Workaround:
 #   https://github.com/bstriner/keras-tqdm/issues/21
-# from IPython.core.display import HTML, display
-# display(HTML("""
-# <style>
-# .p-Widget.jp-OutputPrompt.jp-OutputArea-prompt:empty {
-#   padding: 0;
-#   border: 0;
-# }
-# </style>
-# """))
+try:
+    from IPython import get_ipython
+    if 'IPKernelApp' not in get_ipython().config:  # pragma: no cover
+        raise ImportError("console")
+except:
+    pass
+else:
+    from IPython.core.display import HTML, display
+    display(HTML("""
+    <style>
+    .p-Widget.jp-OutputPrompt.jp-OutputArea-prompt:empty {
+      padding: 0;
+      border: 0;
+    }
+    </style>
+    """))
