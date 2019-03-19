@@ -89,11 +89,27 @@ class LossCallback(Callback):
     def __post_init__(self):
         self.name = self.recorder.get_unique_name(self.section, self.name)
 
+    @torch.no_grad()
     def epoch_end(self, l: Learner):
-        with torch.no_grad():
-            data_in, data_out = self.ds[:]
-            output = l.model(data_in)
-            loss = l.loss_fn(output, data_out, self.name, l)
-            self.recorder.update_(self.section, {self.name: loss.item()}, l.progress.current_epoch_iter)
+        data_in, data_out = self.ds[:]
+        output = l.model(data_in)
+        loss = l.loss_fn(output, data_out, self.name, l)
+        self.recorder.update_(self.section, {self.name: loss.item()}, l.progress.current_epoch_iter)
 
 
+@dataclass
+class MetricCallback(Callback):
+    recorder: Recorder
+    ds: Dataset
+    metric: Callable
+    name: str = "Metric"
+    section: str = "MetricCallback"
+
+    def __post_init__(self):
+        self.name = self.recorder.get_unique_name(self.section, self.name)
+
+    @torch.no_grad()
+    def epoch_end(self, l: Learner):
+        data_in, data_out = self.ds[:]
+        metric_val = self.metric(l.model, data_in, data_out)
+        self.recorder.update_(self.section, {self.name: metric_val}, l.progress.current_epoch_iter)

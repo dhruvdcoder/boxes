@@ -1,6 +1,3 @@
-import torch
-import torch.nn.functional as F
-import torch.optim as optim
 from .delta_boxes import *
 from .unit_boxes import *
 from .callbacks import *
@@ -8,8 +5,7 @@ from .learner import *
 from .probability_dataset import *
 from .loss_functions import *
 from .box_operations import *
-import numpy as np
-import pandas as pd
+from .metrics import *
 
 # This is to handle this bug in tqdm, which is fixed in Jupyter but not in JupyterLab:
 #   https://github.com/tqdm/tqdm/issues/433
