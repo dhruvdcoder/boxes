@@ -29,6 +29,9 @@ class Recorder:
         self._data[name] = [] # adds this column to DataFrame
         return name
 
+    def __getitem__(self, item):
+        return self._data.__getitem__(item)
+
     def _repr_html_(self):
         return self._data._repr_html_()
 
