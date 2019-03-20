@@ -75,6 +75,7 @@ class Learner:
         self.callbacks.learner_post_init(self)
 
     def train(self, epochs):
+        self.callbacks.train_begin(self)
         for epoch in trange(epochs, desc="Overall Training:"):
             self.callbacks.epoch_begin(self)
             for iteration, batch in enumerate(tqdm(self.train_dl, desc="Current Batch:", leave=False)):

@@ -4,12 +4,17 @@ from dataclasses import dataclass, field
 import torch
 from torch.utils.data import Dataset
 from .box_operations import *
+import ipywidgets as widgets
+from IPython.core.display import HTML, display
 if TYPE_CHECKING:
     from .learner import Learner, Recorder
 
 
 class Callback:
     def learner_post_init(self, learner: Learner):
+        pass
+
+    def train_begin(self, learner: Learner):
         pass
 
     def epoch_begin(self, learner: Learner):
@@ -111,3 +116,23 @@ class MetricCallback(Callback):
         data_in, data_out = self.ds[:]
         metric_val = self.metric(l.model, data_in, data_out)
         self.recorder.update_({self.name: metric_val}, l.progress.current_epoch_iter)
+
+
+@dataclass
+class DisplayTable(Callback):
+    recorder: Union[Recorder, None] = None
+
+    def learner_post_init(self, learner: Learner):
+        if self.recorder is None:
+            self.recorder = learner.recorder
+
+    @torch.no_grad()
+    def train_begin(self, learner: Learner):
+        self.out = widgets.Output()
+
+    @torch.no_grad()
+    def epoch_end(self, learner: Learner):
+        self.out.clear_output()
+        with self.out:
+            display(self.recorder)
+
