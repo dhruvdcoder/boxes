@@ -12,56 +12,6 @@ from .callbacks import CallbackCollection
 
 
 @dataclass
-class Progress:
-    current_epoch_iter: int = 0
-    current_batch_iter: int = 0
-    num_batches: int = 0
-
-    def increment(self):
-        self.current_batch_iter += 1
-        if self.current_batch_iter == self.num_batches:
-            self.current_batch_iter = 0
-            self.current_epoch_iter += 1
-
-    def percent_epoch_complete(self):
-        return self.current_batch_iter / self.num_batches
-
-    def partial_epoch_progress(self):
-        return self.current_epoch_iter + self.percent_epoch_complete()
-
-
-@dataclass
-class Learner:
-    train_dl: DataLoader
-    model: Module
-    loss_fn: Callable
-    opt: optim.Optimizer
-    callbacks: CallbackCollection = field(default_factory=CallbackCollection)
-    progress: Progress = field(default_factory=Progress)
-    metadata: Dict[str, object] = field(default_factory=dict)
-
-    def __post_init__(self):
-        self.progress = Progress(0,0,len(self.train_dl))
-        self.callbacks.learner_post_init(self)
-
-    def train(self, epochs):
-        for epoch in trange(epochs, desc="Overall Training:"):
-            self.callbacks.epoch_begin(self)
-            for iteration, batch in enumerate(tqdm(self.train_dl, desc="Current Batch:", leave=False)):
-                self.batch_in, self.batch_out = batch
-                self.progress.increment()
-                self.callbacks.batch_begin(self)
-                self.opt.zero_grad()
-                self.model_out = self.model(self.batch_in)
-                self.loss = self.loss_fn(self.model_out, self.batch_out, self)
-                self.loss.backward()
-                self.callbacks.backward_end(self)
-                self.opt.step()
-                self.callbacks.batch_end(self)
-            self.callbacks.epoch_end(self)
-
-
-@dataclass
 class Recorder:
     _data: pd.DataFrame = field(default_factory=pd.DataFrame)
 
@@ -89,3 +39,51 @@ class Recorder:
         return self._data.__repr__()
 
 
+@dataclass
+class Progress:
+    current_epoch_iter: int = 0
+    current_batch_iter: int = 0
+    num_batches: int = 0
+
+    def increment(self):
+        self.current_batch_iter += 1
+        if self.current_batch_iter == self.num_batches:
+            self.current_batch_iter = 0
+            self.current_epoch_iter += 1
+
+    def percent_epoch_complete(self):
+        return self.current_batch_iter / self.num_batches
+
+    def partial_epoch_progress(self):
+        return self.current_epoch_iter + self.percent_epoch_complete()
+
+
+@dataclass
+class Learner:
+    train_dl: DataLoader
+    model: Module
+    loss_fn: Callable
+    opt: optim.Optimizer
+    callbacks: CallbackCollection = field(default_factory=CallbackCollection)
+    progress: Progress = field(default_factory=Progress)
+    recorder: Recorder = field(default_factory=Recorder)
+
+    def __post_init__(self):
+        self.progress = Progress(0,0,len(self.train_dl))
+        self.callbacks.learner_post_init(self)
+
+    def train(self, epochs):
+        for epoch in trange(epochs, desc="Overall Training:"):
+            self.callbacks.epoch_begin(self)
+            for iteration, batch in enumerate(tqdm(self.train_dl, desc="Current Batch:", leave=False)):
+                self.batch_in, self.batch_out = batch
+                self.progress.increment()
+                self.callbacks.batch_begin(self)
+                self.opt.zero_grad()
+                self.model_out = self.model(self.batch_in)
+                self.loss = self.loss_fn(self.model_out, self.batch_out, self, self.recorder)
+                self.loss.backward()
+                self.callbacks.backward_end(self)
+                self.opt.step()
+                self.callbacks.batch_end(self)
+            self.callbacks.epoch_end(self)

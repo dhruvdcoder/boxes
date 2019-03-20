@@ -29,18 +29,17 @@ def func_list_to_dict(func_list) -> Dict[str, Callable]:
 
 class LossPieces:
 
-    def __init__(self, recorder: Recorder, *loss_funcs):
+    def __init__(self, *loss_funcs):
         """
 
         :param functions: List of functions or tuples (weight, function)
         :type functions: Collection[Union[Callable, Tuple[float, Callable]]]
         """
-        self.recorder = recorder
         self.loss_funcs = func_list_to_dict(loss_funcs)
 
     def loss_func(self, model_out: Tensor, true_out: Tensor, learner: Learner = None, recorder: Recorder = None) -> Tensor:
         """
-        Weighted sum of all loss functions. Tracks values in learner.
+        Weighted sum of all loss functions. Tracks values in Recorder.
 
         """
         grad_status = torch.is_grad_enabled()

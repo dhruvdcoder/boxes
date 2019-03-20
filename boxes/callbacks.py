@@ -61,6 +61,10 @@ class MinBoxSize(Callback):
     name: str = "Small Boxes"
     eps: float = 1e-6 # added to the size of the boxes due to floating point precision
 
+    def learner_post_init(self, learner: Learner):
+        if self.recorder is None:
+            self.recorder = learner.recorder
+
     def batch_end(self, l: Learner):
         with torch.no_grad():
             boxes = l.model.boxes.boxes
