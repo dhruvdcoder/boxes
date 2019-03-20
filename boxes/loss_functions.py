@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from typing import *
 from .learner import Learner, Recorder
 from collections import OrderedDict
+from .box_operations import *
 
 
 def func_list_to_dict(func_list) -> Dict[str, Callable]:
@@ -81,3 +82,21 @@ def kl_div_sym(p, q, eps=1e-38):
 
 def kl_div_term(p, q, eps=1e-38):
     return F.kl_div(torch.log(p.clamp_min(eps)), q.clamp_min(eps), reduction="none")
+
+
+def mean_pull_loss(model_out, target, eps=1e-6):
+    boxes = model_out['boxes']
+    A = boxes[:,:,0]
+    B = boxes[:,:,1]
+    penalty = ((A[:,:,0] - B[:,:,1] + eps).clamp(0) + (A[:,:,1] - B[:,:,0] + eps).clamp(0)).sum(dim=-1)
+    _needing_pull_mask = needing_pull_mask(boxes, target)
+    return penalty[_needing_pull_mask].sum() / _needing_pull_mask.sum()
+
+
+def mean_push_loss(model_out, target, eps=1e-6):
+    boxes = model_out['boxes']
+    A = boxes[:,:,0]
+    B = boxes[:,:,1]
+    penalty = ((A[:,:,1] - B[:,:,1] + eps).clamp(0) * (A[:,:,0] - B[:,:,0]).clamp(0)).prod(dim=-1)
+    _needing_push_mask = needing_push_mask(boxes, target)
+    return penalty[_needing_push_mask].sum() / _needing_push_mask.sum()
