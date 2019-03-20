@@ -51,7 +51,6 @@ class LossPieces:
             # Note: don't want to detach / move / unwrap tensors here because we have to sum the loss first:
             loss = sum(loss_pieces.values())
             loss_pieces['loss'] = loss
-            loss_pieces = {k: t.detach().cpu().item() for k, t in loss_pieces.items()}
             if learner is not None:
                 if recorder is not None:
                     recorder.update_(loss_pieces, learner.progress.partial_epoch_progress())
@@ -89,17 +88,25 @@ def mean_pull_loss(model_out, target, eps=1e-6):
     Pulls together boxes which are disjoint but should overlap.
     """
     boxes = model_out['boxes']
-    A = boxes[:,:,0]
-    B = boxes[:,:,1]
-    penalty = ((A[:,:,0] - B[:,:,1] + eps).clamp(0) + (B[:,:,0] - A[:,:,1] + eps).clamp(0)).sum(dim=-1)
     _needing_pull_mask = needing_pull_mask(boxes, target)
-    return penalty[_needing_pull_mask].sum() / _needing_pull_mask.sum()
+    num_needing_pull_mask = _needing_pull_mask.sum()
+    if num_needing_pull_mask == 0:
+        return 0
+    else:
+        A = boxes[:,:,0]
+        B = boxes[:,:,1]
+        penalty = ((A[:,:,0] - B[:,:,1] + eps).clamp(0) + (B[:,:,0] - A[:,:,1] + eps).clamp(0)).sum(dim=-1)
+        return penalty[_needing_pull_mask].sum() / num_needing_pull_mask
 
 
 def mean_push_loss(model_out, target, eps=1e-6):
     boxes = model_out['boxes']
-    A = boxes[:,:,0]
-    B = boxes[:,:,1]
-    penalty = ((A[:,:,1] - B[:,:,1] + eps).clamp(0) * (A[:,:,0] - B[:,:,0]).clamp(0)).prod(dim=-1)
     _needing_push_mask = needing_push_mask(boxes, target)
-    return penalty[_needing_push_mask].sum() / _needing_push_mask.sum()
+    num_needing_push_mask = _needing_push_mask.sum()
+    if num_needing_push_mask == 0:
+        return 0
+    else:
+        A = boxes[:,:,0]
+        B = boxes[:,:,1]
+        penalty = torch.min((A[:,:,1] - B[:,:,1] + eps).clamp(0).min(dim=-1)[0], (A[:,:,0] - B[:,:,0] + eps).clamp(0).min(dim=-1)[0])
+        return penalty[_needing_push_mask].sum() / num_needing_push_mask
