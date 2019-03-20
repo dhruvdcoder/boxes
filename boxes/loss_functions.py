@@ -59,7 +59,7 @@ class LossPieces:
 
 
 def mean_unit_cube_loss(model_out, _):
-    return ((model_out['boxes'].boxes - 1).clamp(0) + (-model_out['boxes'].boxes).clamp(0)).sum(dim=[2, 3]).mean()
+    return ((model_out['boxes_param'].boxes - 1).clamp(0) + (-model_out['boxes_param'].boxes).clamp(0)).sum(dim=[2, 3]).mean()
 
 
 def mean_unary_kl_loss(unary, eps=1e-38):

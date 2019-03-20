@@ -67,3 +67,33 @@ def replace_Z_by_cube_(boxes: Tensor, indices: Tensor, cube_vol: float = 1e-20) 
     :return: tensor representing the box parametrization with those boxes
     """
     boxes[:, :, 1][indices] = replace_Z_by_cube(boxes, indices, cube_vol)
+
+
+def disjoint_boxes_mask(boxes: Tensor) -> Tensor:
+    A = boxes[:,:,0]
+    B = boxes[:,:,1]
+    return ((B[:,:,1] <= A[:,:,0]) | (B[:,:,0] >= A[:,:,1])).any(dim=-1)
+
+
+def overlapping_boxes_mask(boxes: Tensor) -> Tensor:
+    return disjoint_boxes_mask(boxes) ^ 1
+
+
+def containing_boxes_mask(boxes: Tensor) -> Tensor:
+    """
+    Returns a mask for when B contains A
+    :param boxes:
+    :return:
+    """
+    A = boxes[:,:,0]
+    B = boxes[:,:,1]
+    return ((B[:,:,1] >= A[:,:,1]) & (B[:,:,0] <= A[:,:,0])).all(dim=-1)
+
+
+def needing_pull_mask(boxes: Tensor, target_prob_B_given_A: Tensor) -> Tensor:
+    return (target_prob_B_given_A != 0) & disjoint_boxes_mask(boxes)
+
+
+def needing_push_mask(boxes: Tensor, target_prob_B_given_A: Tensor) -> Tensor:
+    return (target_prob_B_given_A != 1) & containing_boxes_mask(boxes)
+

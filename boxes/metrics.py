@@ -1,5 +1,6 @@
 import torch
 from torch import Tensor
+from .box_operations import *
 
 
 def pearson_r(p: Tensor, q: Tensor) -> Tensor:
@@ -28,5 +29,14 @@ def pearson_r(p: Tensor, q: Tensor) -> Tensor:
     # return r, prob
     return r
 
+
 def metric_pearson_r(model, data_in, data_out):
     return pearson_r(model(data_in)["P(B|A)"], data_out).detach().cpu().item()
+
+
+def metric_num_needing_push(model, data_in, data_out):
+    return needing_push_mask(model(data_in)['boxes'], data_out).sum().detach().cpu().item()
+
+
+def metric_num_needing_pull(model, data_in, data_out):
+    return needing_pull_mask(model(data_in)['boxes'], data_out).sum().detach().cpu().item()

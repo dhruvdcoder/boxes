@@ -31,6 +31,9 @@ class UnitBoxes(Module):
 
         self.boxes = Parameter(torch.stack((z, Z), dim=2))
 
+    def forward(self, ids=slice(None, None, None), **kwargs):
+        return self.boxes[:,ids]
+
     def min(self, ids=slice(None, None, None), **kwargs):
         return self.boxes[:,ids,0]
 
