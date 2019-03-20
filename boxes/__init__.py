@@ -6,6 +6,7 @@ from .probability_dataset import *
 from .loss_functions import *
 from .box_operations import *
 from .metrics import *
+from .modules import *
 
 # This is to handle this bug in tqdm, which is fixed in Jupyter but not in JupyterLab:
 #   https://github.com/tqdm/tqdm/issues/433
