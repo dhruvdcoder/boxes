@@ -65,7 +65,6 @@ class Learner:
     loss_fn: Callable
     opt: optim.Optimizer
     callbacks: CallbackCollection = field(default_factory=CallbackCollection)
-    progress: Progress = field(default_factory=Progress)
     recorder: Recorder = field(default_factory=Recorder)
 
     def __post_init__(self):
