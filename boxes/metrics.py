@@ -1,6 +1,7 @@
 import torch
 from torch import Tensor
 from .box_operations import *
+import scipy.stats as spstats # For Spearman r
 
 
 def pearson_r(p: Tensor, q: Tensor) -> Tensor:
@@ -30,9 +31,21 @@ def pearson_r(p: Tensor, q: Tensor) -> Tensor:
     return r
 
 
+def spearman_r(p: Tensor, q: Tensor) -> float:
+    """Spearman r statistic"""
+    # TODO: Make a pytorch tensor version of this
+    p = p.cpu().detach().numpy()
+    q = q.cpu().detach().numpy()
+    sr, _ = spstats.spearmanr(p, q)
+    return sr
+
+
 def metric_pearson_r(model, data_in, data_out):
     return pearson_r(model(data_in)["P(B|A)"], data_out).detach().cpu().item()
 
+
+def metric_spearman_r(model, data_in, data_out):
+    return spearman_r(model(data_in)['P(B|A)'], data_out)
 
 def metric_num_needing_push(model, data_in, data_out):
     return needing_push_mask(model(data_in)['boxes'], data_out).sum().detach().cpu().item()
