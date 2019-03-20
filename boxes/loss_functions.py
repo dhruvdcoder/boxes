@@ -7,7 +7,7 @@ from collections import OrderedDict
 from .box_operations import *
 
 
-def func_list_to_dict(func_list) -> Dict[str, Callable]:
+def func_list_to_dict(*func_list) -> Dict[str, Callable]:
     """
 
     :param func_list: List of functions or tuples (weight, function)
@@ -21,8 +21,7 @@ def func_list_to_dict(func_list) -> Dict[str, Callable]:
     func_dict = OrderedDict()
     for f in func_list:
         if type(f) is tuple:
-            func_dict[f"{f[0]}*{f[1].__name__}"] = lambda *x: f[0] * f[1](*x)
-            func_dict[f[0]] = f[1]
+            func_dict[f"{f[0]}*{f[1].__name__}"] = lambda *args, weight=f[0], func=f[1], **kwargs: weight * func(*args, **kwargs)
         else:
             func_dict[f.__name__] = f
     return func_dict
@@ -36,7 +35,7 @@ class LossPieces:
         :param functions: List of functions or tuples (weight, function)
         :type functions: Collection[Union[Callable, Tuple[float, Callable]]]
         """
-        self.loss_funcs = func_list_to_dict(loss_funcs)
+        self.loss_funcs = func_list_to_dict(*loss_funcs)
 
     def loss_func(self, model_out: Tensor, true_out: Tensor, learner: Learner = None, recorder: Recorder = None) -> Tensor:
         """
