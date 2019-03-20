@@ -39,3 +39,6 @@ class UnitBoxes(Module):
 
     def max(self, ids=slice(None, None, None), **kwargs):
         return self.boxes[:,ids,1]
+
+    def calc_dim_scales(self):
+        return torch.ones(self.boxes.shape[-1]).to(self.boxes.device)
