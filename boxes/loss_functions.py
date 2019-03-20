@@ -51,10 +51,11 @@ class LossPieces:
             loss = sum(loss_pieces.values())
             loss_pieces['loss'] = loss
             loss_pieces = {k: t.detach().cpu().item() for k, t in loss_pieces.items()}
-            if recorder is not None:
-                recorder.update_(loss_pieces, learner.progress.partial_epoch_progress())
-            else:
-                self.recorder.update_(loss_pieces, learner.progress.partial_epoch_progress())
+            if learner is not None:
+                if recorder is not None:
+                    recorder.update_(loss_pieces, learner.progress.partial_epoch_progress())
+                else:
+                    self.recorder.update_(loss_pieces, learner.progress.partial_epoch_progress())
         finally:
             torch.set_grad_enabled(grad_status)
         return loss
