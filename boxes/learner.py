@@ -45,7 +45,6 @@ class Learner:
         self.callbacks.learner_post_init(self)
 
     def train(self, epochs):
-        self.status = "train"
         for epoch in trange(epochs, desc="Overall Training:"):
             self.callbacks.epoch_begin(self)
             for iteration, batch in enumerate(tqdm(self.train_dl, desc="Current Batch:", leave=False)):
@@ -54,7 +53,7 @@ class Learner:
                 self.callbacks.batch_begin(self)
                 self.opt.zero_grad()
                 self.model_out = self.model(self.batch_in)
-                self.loss = self.loss_fn(self.model_out, self.batch_out, "train", self)
+                self.loss = self.loss_fn(self.model_out, self.batch_out, self)
                 self.loss.backward()
                 self.callbacks.backward_end(self)
                 self.opt.step()
@@ -64,25 +63,29 @@ class Learner:
 
 @dataclass
 class Recorder:
-    _data: Dict[str, pd.DataFrame] = field(default_factory=lambda: defaultdict(pd.DataFrame))
+    _data: pd.DataFrame = field(default_factory=pd.DataFrame)
 
-    def update_(self, section:str, data: Dict[str, Any], index: Union[int, float]):
-        self[section] = self[section].combine_first(
-            pd.DataFrame(data, [index])
+    def update_(self, data_in: Dict[str, Any], index: Union[int, float]):
+        data_no_tensors = {k: v if type(v) is not torch.Tensor else v.detach().cpu().item() for k,v in data_in.items()}
+        self._data = self._data.combine_first(
+            pd.DataFrame(data_no_tensors, [index])
         )
 
-    def get_unique_name(self, section:str, name:str):
+    def get_unique_name(self, name:str):
         i = 1
-        while name in self[section].columns:
+        while name in self._data.columns:
             name = f"{name}_{i}"
             i += 1
-        self[section][name] = [] # adds this column to DataFrame
+        self._data[name] = [] # adds this column to DataFrame
         return name
 
-    def __getitem__(self, name:str):
-        return self._data[name]
+    def _repr_html_(self):
+        return self._data._repr_html_()
 
-    def __setitem__(self, name:str, val:pd.DataFrame):
-        self._data[name] = val
+    def __str__(self):
+        return self._data.__str__()
+
+    def __repr__(self):
+        return self._data.__repr__()
 
 

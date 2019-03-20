@@ -38,13 +38,13 @@ class LossPieces:
         self.recorder = recorder
         self.loss_funcs = func_list_to_dict(loss_funcs)
 
-    def loss_func(self, model_out: Tensor, true_out: Tensor, section: str = "LossPieces", learner: Learner = None) -> Tensor:
+    def loss_func(self, model_out: Tensor, true_out: Tensor, learner: Learner = None, recorder: Recorder = None) -> Tensor:
         """
         Weighted sum of all loss functions. Tracks values in learner.
 
         """
         grad_status = torch.is_grad_enabled()
-        if learner is None or learner.status != "train":
+        if learner is None:
             torch.set_grad_enabled(False)
         try:
             loss_pieces = {k: l(model_out, true_out) for k, l in self.loss_funcs.items()}
@@ -52,7 +52,10 @@ class LossPieces:
             loss = sum(loss_pieces.values())
             loss_pieces['loss'] = loss
             loss_pieces = {k: t.detach().cpu().item() for k, t in loss_pieces.items()}
-            self.recorder.update_(section, loss_pieces, learner.progress.partial_epoch_progress())
+            if recorder is not None:
+                recorder.update_(loss_pieces, learner.progress.partial_epoch_progress())
+            else:
+                self.recorder.update_(loss_pieces, learner.progress.partial_epoch_progress())
         finally:
             torch.set_grad_enabled(grad_status)
         return loss

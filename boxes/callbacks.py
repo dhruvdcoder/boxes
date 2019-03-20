@@ -58,7 +58,6 @@ class MinBoxSize(Callback):
     """
     min_vol: float = 1e-6
     recorder: Union[None, Recorder] = None
-    section: str = "MinBoxSize"
     name: str = "Small Boxes"
     eps: float = 1e-6 # added to the size of the boxes due to floating point precision
 
@@ -68,33 +67,27 @@ class MinBoxSize(Callback):
             small_boxes = detect_small_boxes(boxes, l.model.vol, self.min_vol)
             num_min_boxes = small_boxes.sum().detach().cpu().item()
             if self.recorder is not None:
-                self.recorder.update_(self.section, {self.name + f" (<{self.min_vol} before MinBoxSize)": num_min_boxes}, l.progress.partial_epoch_progress())
-                self.recorder.update_(self.section, {self.name + f" (<{self.min_vol - self.eps} before MinBoxSize)": detect_small_boxes(boxes, l.model.vol, self.min_vol - self.eps).sum().detach().cpu().item()}, l.progress.partial_epoch_progress())
+                self.recorder.update_({self.name + f" (<{self.min_vol} before MinBoxSize)": num_min_boxes}, l.progress.partial_epoch_progress())
+                self.recorder.update_({self.name + f" (<{self.min_vol - self.eps} before MinBoxSize)": detect_small_boxes(boxes, l.model.vol, self.min_vol - self.eps).sum().detach().cpu().item()}, l.progress.partial_epoch_progress())
             if num_min_boxes > 0:
                 replace_Z_by_cube_(boxes, small_boxes, self.min_vol + self.eps)
             small_boxes = detect_small_boxes(boxes, l.model.vol, self.min_vol)
             num_min_boxes = small_boxes.sum().detach().cpu().item()
             if self.recorder is not None:
-                self.recorder.update_(self.section, {self.name + f" (<{self.min_vol} after MinBoxSize)": num_min_boxes}, l.progress.partial_epoch_progress())
-                self.recorder.update_(self.section, {self.name + f" (<{self.min_vol - self.eps} after MinBoxSize)": detect_small_boxes(boxes, l.model.vol, self.min_vol - self.eps).sum().detach().cpu().item()}, l.progress.partial_epoch_progress())
+                self.recorder.update_({self.name + f" (<{self.min_vol} after MinBoxSize)": num_min_boxes}, l.progress.partial_epoch_progress())
+                self.recorder.update_({self.name + f" (<{self.min_vol - self.eps} after MinBoxSize)": detect_small_boxes(boxes, l.model.vol, self.min_vol - self.eps).sum().detach().cpu().item()}, l.progress.partial_epoch_progress())
 
 
 @dataclass
 class LossCallback(Callback):
     recorder: Recorder
     ds: Dataset
-    name: str = "Loss"
-    section: str = "LossCallback"
-
-    def __post_init__(self):
-        self.name = self.recorder.get_unique_name(self.section, self.name)
 
     @torch.no_grad()
     def epoch_end(self, l: Learner):
         data_in, data_out = self.ds[:]
         output = l.model(data_in)
-        loss = l.loss_fn(output, data_out, self.name, l)
-        self.recorder.update_(self.section, {self.name: loss.item()}, l.progress.current_epoch_iter)
+        l.loss_fn(output, data_out, l, self.recorder) # this logs the data to the recorder
 
 
 @dataclass
@@ -102,14 +95,15 @@ class MetricCallback(Callback):
     recorder: Recorder
     ds: Dataset
     metric: Callable
-    name: str = "Metric"
-    section: str = "MetricCallback"
+    name: Union[str, None] = None
 
     def __post_init__(self):
-        self.name = self.recorder.get_unique_name(self.section, self.name)
+        if self.name is None:
+            self.name = self.metric.__name__
+        self.name = self.recorder.get_unique_name(self.name)
 
     @torch.no_grad()
     def epoch_end(self, l: Learner):
         data_in, data_out = self.ds[:]
         metric_val = self.metric(l.model, data_in, data_out)
-        self.recorder.update_(self.section, {self.name: metric_val}, l.progress.current_epoch_iter)
+        self.recorder.update_({self.name: metric_val}, l.progress.current_epoch_iter)
