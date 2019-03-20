@@ -31,8 +31,9 @@ class BoxModel(Module):
         int_z, int_Z = self.int(z,Z)
         vol_int = self.vol(int_Z - int_z)
         vol_A = self.vol(A_Z - A_z)
-        all_z = self.boxes.min(scaled=True)
-        all_Z = self.boxes.max(scaled=True)
+        all_boxes = self.boxes(scaled=True)
+        all_z = all_boxes[:,:,0]
+        all_Z = all_boxes[:,:,1]
         unary_vol = self.vol(all_Z - all_z)
         return {
             'P(A,B)': self.weights(vol_int / self.scale_func()),
@@ -41,6 +42,7 @@ class BoxModel(Module):
             'z,Z': (z,Z),
             'boxes': boxes,
             'unary_vol': self.weights(unary_vol / self.scale_func()),
-            'all_z, all_Z': (all_z, all_Z),
+            'all_boxes': all_boxes,
+            'all_z,all_Z': (all_z,all_Z),
             'boxes_param': self.boxes,
         }
