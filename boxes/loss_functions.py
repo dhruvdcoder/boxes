@@ -85,10 +85,13 @@ def kl_div_term(p, q, eps=1e-38):
 
 
 def mean_pull_loss(model_out, target, eps=1e-6):
+    """
+    Pulls together boxes which are disjoint but should overlap.
+    """
     boxes = model_out['boxes']
     A = boxes[:,:,0]
     B = boxes[:,:,1]
-    penalty = ((A[:,:,0] - B[:,:,1] + eps).clamp(0) + (A[:,:,1] - B[:,:,0] + eps).clamp(0)).sum(dim=-1)
+    penalty = ((A[:,:,0] - B[:,:,1] + eps).clamp(0) + (B[:,:,0] - A[:,:,1] + eps).clamp(0)).sum(dim=-1)
     _needing_pull_mask = needing_pull_mask(boxes, target)
     return penalty[_needing_pull_mask].sum() / _needing_pull_mask.sum()
 

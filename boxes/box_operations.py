@@ -70,6 +70,11 @@ def replace_Z_by_cube_(boxes: Tensor, indices: Tensor, cube_vol: float = 1e-20) 
 
 
 def disjoint_boxes_mask(boxes: Tensor) -> Tensor:
+    """
+    Returns a mask for when A and B are disjoint
+    :param boxes:
+    :return:
+    """
     A = boxes[:,:,0]
     B = boxes[:,:,1]
     return ((B[:,:,1] <= A[:,:,0]) | (B[:,:,0] >= A[:,:,1])).any(dim=-1)
