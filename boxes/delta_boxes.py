@@ -12,7 +12,7 @@ class DeltaBoxes(Module):
     def forward(self, ids=slice(None, None, None), scaled = False, **kwargs):
         z = self.min(ids, scaled, **kwargs)
         Z = self.max(ids, scaled, **kwargs)
-        return torch.stack((z,Z), dim=2)
+        return torch.stack((z,Z), dim=-2)
 
     def min(self, ids=slice(None, None, None), scaled = False, **kwargs):
         z = self.z[:, ids]
