@@ -146,3 +146,15 @@ class StopAtMaxLoss(Callback):
     def batch_end(self, learner: Learner):
         if learner.loss > self.max_loss:
             raise MaxLoss(learner.loss, self.max_loss)
+
+
+@dataclass
+class ModelHistory(Callback):
+    state_dict :List[dict] = field(default_factory=list)
+
+    @torch.no_grad()
+    def batch_end(self, learner: Learner):
+        self.state_dict.append({k: v.detach().cpu().clone() for k, v in learner.model.state_dict().items()})
+
+    def __getitem__(self, item):
+        return self.state_dict[item]
