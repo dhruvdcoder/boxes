@@ -6,8 +6,10 @@ from torch.nn import Module
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm.autonotebook import tqdm, trange
+from .exceptions import *
 from collections import defaultdict
 import pandas as pd
+
 from .callbacks import CallbackCollection
 
 
@@ -75,18 +77,23 @@ class Learner:
         self.callbacks.learner_post_init(self)
 
     def train(self, epochs):
-        self.callbacks.train_begin(self)
-        for epoch in trange(epochs, desc="Overall Training:"):
-            self.callbacks.epoch_begin(self)
-            for iteration, batch in enumerate(tqdm(self.train_dl, desc="Current Batch:", leave=False)):
-                self.batch_in, self.batch_out = batch
-                self.progress.increment()
-                self.callbacks.batch_begin(self)
-                self.opt.zero_grad()
-                self.model_out = self.model(self.batch_in)
-                self.loss = self.loss_fn(self.model_out, self.batch_out, self, self.recorder)
-                self.loss.backward()
-                self.callbacks.backward_end(self)
-                self.opt.step()
-                self.callbacks.batch_end(self)
-            self.callbacks.epoch_end(self)
+        try:
+            self.callbacks.train_begin(self)
+            for epoch in trange(epochs, desc="Overall Training:"):
+                self.callbacks.epoch_begin(self)
+                for iteration, batch in enumerate(tqdm(self.train_dl, desc="Current Batch:", leave=False)):
+                    self.batch_in, self.batch_out = batch
+                    self.progress.increment()
+                    self.callbacks.batch_begin(self)
+                    self.opt.zero_grad()
+                    self.model_out = self.model(self.batch_in)
+                    self.loss = self.loss_fn(self.model_out, self.batch_out, self, self.recorder)
+                    self.loss.backward()
+                    self.callbacks.backward_end(self)
+                    self.opt.step()
+                    self.callbacks.batch_end(self)
+                self.callbacks.epoch_end(self)
+        except StopTrainingError as e:
+            print(e)
+        except KeyboardInterrupt:
+            print(f"Stopped training at {self.progress.partial_epoch_progress()} epochs due to keyboard interrupt.")

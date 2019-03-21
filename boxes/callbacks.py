@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import torch
 from torch.utils.data import Dataset
 from .box_operations import *
+from .exceptions import *
 import ipywidgets as widgets
 from IPython.core.display import HTML, display
 if TYPE_CHECKING:
@@ -136,3 +137,12 @@ class DisplayTable(Callback):
         with self.out:
             display(self.recorder)
 
+
+@dataclass
+class StopAtMaxLoss(Callback):
+    max_loss: float = 100.
+
+    @torch.no_grad()
+    def batch_end(self, learner: Learner):
+        if learner.loss > self.max_loss:
+            raise MaxLoss(learner.loss, self.max_loss)
