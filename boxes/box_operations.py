@@ -2,7 +2,6 @@ import torch
 from torch import Tensor # for type annotations
 import torch.nn.functional as F
 from typing import *
-from .unit_boxes import UnitBoxes
 
 
 def intersection(z:Tensor, Z:Tensor) -> Tuple[Tensor, Tensor]:

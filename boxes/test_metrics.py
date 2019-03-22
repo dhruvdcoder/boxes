@@ -10,6 +10,8 @@ from hypothesis.extra.numpy import arrays
 same_len_arrays = st.integers(min_value=1, max_value=100).flatmap(
     lambda n: st.lists(arrays(np.float, shape=n, elements=st.floats(1e-1,1)), min_size=2, max_size=2)
     )
+
+
 @given(same_len_arrays)
 def test_pearson_r(arrays):
     p, q = arrays
