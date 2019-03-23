@@ -1,115 +1,63 @@
 import torch
 from torch import Tensor
-from torch.nn import Module, Parameter
+from namedtensor import ntorch, NamedTensor
+from namedtensor.nn.torch_nn import Module
 import torch.nn.functional as F
 from .box_operations import *
 
+from torch.nn import Parameter
 
 ################################################
 # Box Embedding Layers
 ################################################
 
+
 class BoxEmbedding(Module):
     """
-    A base class for creating a Box Embedding parametrization.
-    You should explicitly inherit from both Module and BoxEmbedding, i.e.
+    An example class for creating a Box Embedding parametrization.
+    Don't inherit from this, it is just an example which contains the minimum required methods to be used as a
+    box embedding. At a minimum, you should define methods with the same signature as those that this class contains.
 
-    ```
-    class MyBoxEmbedding(Module, BoxEmbedding):
-        def __init__(self, num_models:int, num_boxes:int, dim:int, **kwargs):
-            super().__init__() # <- This will refer to Module.__init__()
-            ...
-    ```
+    Note: to avoid naming conflicts with min/max functions, we refer to the min coordinate for a box as `z`, and the
+    max coordinate as `Z`.
     """
 
-    def __init__(self, num_models:int, num_boxes:int, dim:int, vol_func:Callable, **kwargs):
+    def __init__(self, num_models:int, num_boxes:int, dim:int, **kwargs):
         """
         Creates the Parameters used for the representation of boxes.
 
         :param num_models: Number of models
         :param num_boxes: Number of boxes
         :param dim: Dimension
-        :param vol_func: Function which can take side-lengths -> volumes
         :param kwargs: Unused for now, but include this for future possible parameters.
         """
         # Remember to call:
         super().__init__()
-        raise NotImplemented
+        pass
 
-    def forward(self, ids: Tensor, scaled = False, **kwargs) -> Tensor:
+
+    def forward(self, box_indices: Union[NamedTensor, None] = None, **kwargs) -> NamedTensor:
         """
-        Returns a Tensor representing the pairs of boxes specified by ids.
+        Returns a Tensor representing the boxes specified by `box_indices` in the form they should be used for training.
 
-        :param ids: A list or 1-dimensional Tensor
-        :param scaled: If True, return the coordinates scaled to the [0,1]^d hypercube.
+        :param box_indices: A NamedTensor of the box indices
         :param kwargs: Unused for now, but include this for future possible parameters.
-        :return: Tensor of shape (model, id, min/max, dim).
+        :return: NamedTensor of shape (model, id, zZ, dim).
         """
         raise NotImplemented
-
-
-    # def min(self, ids: Tensor = slice(None, None, None), scaled = False, **kwargs) -> Tensor: """
-    #     Returns the min coordinates for the pairs of boxes specified by id_pairs.
-    #
-    #     :param ids: For single boxes, a 1-dimensional Tensor.
-    #                 For pairs of boxes, a Tensor of shape (num_pairs, 2)
-    #                 If unset, equivalent to [:], i.e. return all boxes.
-    #     :param scaled: If True, return the coordinates scaled to the [0,1]^d hypercube.
-    #     :param kwargs: Unused for now, but include this for future possible parameters.
-    #     :return: Tensor of shape (model, *ids.shape, dim).
-    #     """
-    #     raise NotImplemented
-    #
-    #
-    # def max(self, ids: Tensor = slice(None, None, None), scaled = False, **kwargs) -> Tensor:
-    #     """
-    #     Returns the max coordinates for the pairs of boxes specified by id_pairs.
-    #
-    #     :param ids: For single boxes, a 1-dimensional Tensor.
-    #                 For pairs of boxes, a Tensor of shape (num_pairs, 2)
-    #                 If unset, equivalent to [:], i.e. return all boxes.
-    #     :param scaled: If True, return the coordinates scaled to the [0,1]^d hypercube.
-    #     :param kwargs: Unused for now, but include this for future possible parameters.
-    #     :return: Tensor of shape (model, pair, A/B, dim)
-    #     """
-    #     raise NotImplemented
-
-    # def universe_min(self):
-    #     """
-    #     Returns the minimum coordinate for the "universe" in each model in each dimension.
-    #         - For boxes which enforce a parametrization in [0,1] this would just be 0.
-    #         - For boxes which allow a dynamic universe, this is typically the smallest
-    #           min coordinate.
-    #
-    #     :return: Tensor (model, dim)
-    #     """
-    #     return torch.min(self.min(), dim=1)
-    #
-    # def universe_max(self):
-    #     """
-    #     Returns the maximum coordinate for each model in each dimension.
-    #         - For boxes which enforce a parametrization in [0,1] this would just be 1.
-    #         - For boxes which allow a dynamic universe, this is typically the smallest
-    #           max coordinate.
-    #
-    #     :return: Tensor (model, dim)
-    #     """
-    #     return torch.max(self.max(), dim=1)
 
     def universe_box(self) -> Tensor:
         """
-        For each model, returns the min/max coordinates of the smallest box which contains
-        all other boxes.
-            - For boxes which enforce a parametrization in [0,1] this would just be 1.
-            - For boxes which allow a dynamic universe, this is typically the smallest
-              max coordinate.
+        For each model, returns the min/max coordinates of the "universe" box.
+            - For boxes which enforce a parametrization in the unit cube, this is simply the unit cube.
+            - For boxes which allow a dynamic universe, this is typically the smallest containing box.
 
-        :return: Tensor (model, min/max, dim)
+        :return: NamedTensor of shape (model, zZ, dim)
         """
-        return torch.stack((self.min_coord(), self.max_coord()), dim=1)
+        raise NotImplemented
 
 
-class UnitBoxes(Module, BoxEmbedding):
+class UnitBoxes(Module):
     """
     Parametrize boxes using the min coordinate and max coordinate,
     initialized to be in the unit hypercube.
@@ -121,15 +69,25 @@ class UnitBoxes(Module, BoxEmbedding):
     taken to preserve max > min while training. (See MinBoxSize Callback.)
     """
 
-    def __init__(self, num_models:int, num_boxes:int, dim:int, init_min_vol = 1e-2, **kwargs):
+    def __init__(self, num_models: int, num_boxes: int, dim: int, init_min_vol: float = 1e-2, **kwargs):
+        """
+        Creates the Parameters used for the representation of boxes.
+
+        :param num_models: Number of models
+        :param num_boxes: Number of boxes
+        :param dim: Dimension
+        :param init_min_vol: Creates boxes which a cube of this volume.
+        :param kwargs: Unused for now, but include this for future possible parameters.
+        """
         super().__init__()
+        rand_param = lambda min, max: min + ntorch.rand(num_models, num_boxes, dim, names=("model", "box", "dim")) * max
         if init_min_vol == 0:
             """
             Uniformly random distribution of coordinates, ensuring
                 Z_j > z_j for all j.
             """
-            z = torch.rand(num_models, num_boxes, dim)
-            Z = z + torch.rand(num_models, num_boxes, dim) * (1. - z)
+            z = rand_param(0, 1)
+            Z = rand_param(z, 1-z)
         elif init_min_vol > 0:
             """
             Uniformly random distribution of coordinates, ensuring that each box
@@ -138,21 +96,41 @@ class UnitBoxes(Module, BoxEmbedding):
             dimensions a cube with small volume still has very large side-lengths.
             """
             eps = init_min_vol ** (1 / dim)
-            z = torch.rand(num_models, num_boxes, dim) * (1 - eps)
-            Z = z + eps + torch.rand(num_models, num_boxes, dim) * (1 - (z + eps))
+            z = rand_param(0, 1-eps)
+            Z = rand_param(z+eps, 1-(z+eps))
         else:
-            raise ValueError(f'init_min_vol={init_min_vol} is an invalid option.')
+            raise ValueError(f"init_min_vol={init_min_vol} is an invalid option.")
 
-        self.boxes = Parameter(torch.stack((z, Z), dim=2))
+        self.boxes = ntorch.stack((z,Z), "zZ")
+        # We have to use self.register_parameter instead of Paramter because namedtensor doesn't currently support the latter.
+        self.register_parameter("boxes", self.boxes)
 
-    def forward(self, ids=slice(None, None, None), **kwargs):
-        return self.boxes[:,ids]
+    def forward(self, box_indices: Union[NamedTensor, None] = None, **kwargs):
+        """
+        Returns a Tensor representing the box embeddings specified by box_indices.
+
+        :param box_indices: A NamedTensor of the box indices
+        :param kwargs: Unused for now, but include this for future possible parameters.
+        :return: NamedTensor of shape (model, id, zZ, dim).
+        """
+        # We have to use this branching condition because namedtensor doesn't currently support slice(None, None, None)
+        if box_indices is None:
+            return self.boxes
+        else:
+            return self.boxes[{"box": box_indices}]
 
     def universe_box(self):
-        return torch.ones(self.boxes.shape[-1]).to(self.boxes.device)
+        """
+        In this case, the universe is just the [0,1] hypercube.
+        :return: NamedTensor of shape (model, zZ, dim) representing [0,1]^d
+        """
+        named_dims = self.boxes.shape
+        z = ntorch.zeros(named_dims["model"], named_dims["dim"])
+        Z = ntorch.ones(named_dims["model"], named_dims["dim"])
+        return ntorch.stack((z,Z), name="zZ")
 
 
-class DeltaBoxes(Module, BoxEmbedding):
+class DeltaBoxes(Module):
     """
     Parametrize boxes using the min coordinate and log of side-length.
 
@@ -164,29 +142,49 @@ class DeltaBoxes(Module, BoxEmbedding):
 
     def __init__(self, num_models: int, num_boxes: int, dim: int, **kwargs):
         super().__init__()
-        self.z = Parameter(torch.rand(num_models, num_boxes, dim))
-        self.logdelta = Parameter(torch.rand(num_models, num_boxes, dim))
+        self.z = ntorch.rand(num_models, num_boxes, dim, names=("model", "box", "dim"))
+        self.logdelta = ntorch.rand(num_models, num_boxes, dim, names=("model", "box", "dim"))
+        self.register_parameter("z", self.z)
+        self.register_parameter("logdelta", self.logdelta)
 
-    def forward(self, ids = slice(None, None, None), scaled = False, **kwargs):
-        z = self.min(ids, scaled, **kwargs)
-        Z = self.max(ids, scaled, **kwargs)
-        return torch.stack((z,Z), dim=-2)
 
-    def min(self, ids = slice(None, None, None), scaled = False, **kwargs):
-        z = self.z[:, ids]
-        if scaled:
-            return (z - min_z) / dim_scales
+    def forward(self, box_indices: Union[NamedTensor, None] = None, **kwargs):
+        """
+        Returns a Tensor representing the box embeddings specified by box_indices.
+
+        :param box_indices: A NamedTensor of the box indices
+        :param kwargs: Unused for now, but include this for future possible parameters.
+        :return: NamedTensor of shape (model, id, zZ, dim).
+        """
+        # We have to use this branching condition because namedtensor doesn't currently support slice(None, None, None)
+        if box_indices is None:
+            return ntorch.stack((self.z, self.z + self.Z()), "zZ")
         else:
-            return z
+            return ntorch.stack((self.z[{"box": box_indices}], self.z[{"box": box_indices}] + self.Z(box_indices)), "zZ")
 
-    def max(self, ids = slice(None, None, None), scaled = False, **kwargs):
-        Z = self.z[:, ids] + torch.exp(self.logdelta[:, ids])
-        if scaled:
-            min_z = self.calc_min_z()
-            dim_scales = self.calc_dim_scales()
-            return (Z - min_z) / dim_scales
+    def Z(self, box_indices: Union[NamedTensor, None] = None, **kwargs):
+        """
+        Returns a Tensor representing the max coordinate of boxes specified by ids as they should be used for training.
+
+        :param box_indices: A NamedTensor of the box indices
+        :param kwargs: Unused for now, but include this for future possible parameters.
+        :return: NamedTensor of shape (model, id, dim).
+        """
+        if box_indices is None:
+            return self.z + ntorch.exp(self.logdelta)
         else:
-            return Z
+            return self.z[{"box": box_indices}] + ntorch.exp(self.logdelta[{"box": box_indices}])
+
+
+    def universe_box(self):
+        """
+        In this case, the universe is just the [0,1] hypercube.
+        :return: NamedTensor of shape (model, zZ, dim) representing [0,1]^d
+        """
+        named_dims = self.boxes.shape
+        z = ntorch.zeros(named_dims["model"], named_dims["dim"])
+        Z = ntorch.ones(named_dims["model"], named_dims["dim"])
+        return ntorch.stack((z,Z), name="zZ")
 
 
 class WeightedSum(Module):
