@@ -228,6 +228,57 @@ class DeltaBoxes(Module):
         return torch.stack((min_z, max_Z), dim=2)
 
 
+class SigmoidBoxes(Module):
+    """
+    Parametrize boxes using sigmoid to make them always valid and contained within the unit cube.
+
+    self.w[model, box, dim] \in \RR
+    self.W[model, box, dim] \in \RR
+
+    z = sigmoid(w)
+    Z = z + sigmoid(W) * (1-z)
+
+    This forces z \in (0,1), Z \in (z, 1).
+
+    NOT IMPLEMENTED YET:
+    Optionally, indicate an eps value, such that side lengths can get no smaller than eps.
+    In this case, we would have
+
+    z = sigmoid(w)
+    Z = (z + eps) + sigmoid(W)*(1-(z+eps))
+
+    and the minimum volume of a box would be eps^d.
+    """
+
+    def __init__(self, num_models: int, num_boxes: int, dim: int, **kwargs):
+        super().__init__()
+        self.w = Parameter(torch.rand(num_models, num_boxes, dim))
+        self.W = Parameter(torch.rand(num_models, num_boxes, dim))
+
+
+    def forward(self, box_indices = slice(None, None, None), **kwargs) -> Tensor:
+        """
+        Returns a Tensor representing the box embeddings specified by box_indices.
+
+        :param box_indices: A NamedTensor of the box indices
+        :param kwargs: Unused for now, but include this for future possible parameters.
+        :return: Tensor of shape (model, id, zZ, dim).
+        """
+        z = F.sigmoid(self.w[:, box_indices])
+        Z = z + F.sigmoid(self.W[:, box_indices]) * (1-z)
+        return torch.stack((z,Z), dim=2)
+
+
+    def universe_box(self) -> Tensor:
+        """
+        In this case, the universe is just the [0,1] hypercube.
+        :return: Tensor of shape (model, 1, zZ, dim) representing [0,1]^d
+        """
+        z = torch.zeros(self.w.shape[0], 1, self.w.shape[-1])
+        Z = torch.ones(self.w.shape[0], 1, self.w.shape[-1])
+        return torch.stack((z, Z), dim=2).to(self.w.device)
+
+
 ###############################################
 # Downstream Model
 ###############################################
