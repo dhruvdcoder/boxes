@@ -12,8 +12,8 @@ from .box_operations import *
 class BoxEmbedding(Module):
     """
     An example class for creating a Box Embedding parametrization.
-    Don't inherit from this, it is just an example which contains the minimum required methods to be used as a
-    box embedding. At a minimum, you should define methods with the same signature as those that this class contains.
+    Don't inherit from this, it is just an example which contains the methods for a class to be used as a BoxEmbedding
+    layer. Refer to the docstring of the functions when implementing your own BoxEmbedding.
 
     Note: to avoid naming conflicts with min/max functions, we refer to the min coordinate for a box as `z`, and the
     max coordinate as `Z`.
@@ -40,16 +40,6 @@ class BoxEmbedding(Module):
         :param box_indices: Slice, List, or Tensor of the box indices
         :param kwargs: Unused for now, but include this for future possible parameters.
         :return: Tensor of shape (model, id, zZ, dim).
-        """
-        raise NotImplemented
-
-    def universe_box(self) -> Tensor:
-        """
-        For each model, returns the min/max coordinates of the "universe" box.
-            - For boxes which enforce a parametrization in the unit cube, this is simply the unit cube.
-            - For boxes which allow a dynamic universe, this is typically the smallest containing box.
-
-        :return: Tensor of shape (model, 1, zZ, dim)
         """
         raise NotImplemented
 
@@ -109,15 +99,6 @@ class UnitBoxes(Module):
         :return: NamedTensor of shape (model, id, zZ, dim).
         """
         return self.boxes[:, box_indices]
-
-    def universe_box(self) -> Tensor:
-        """
-        In this case, the universe is just the [0,1] hypercube.
-        :return: Tensor of shape (model, 1, zZ, dim) representing [0,1]^d
-        """
-        z = torch.zeros(self.boxes.shape[0], 1, self.boxes.shape[-1])
-        Z = torch.ones(self.boxes.shape[0], 1, self.boxes.shape[-1])
-        return torch.stack((z, Z), dim=2).to(self.boxes.device)
 
 
 class MinMaxUnitBoxes(Module):
@@ -181,15 +162,6 @@ class MinMaxUnitBoxes(Module):
         Z, _ = torch.max(self.boxes[:, box_indices], dim=2) # Tensor of shape (model, box, dim)
         return torch.stack((z, Z), dim=2)
 
-    def universe_box(self) -> Tensor:
-        """
-        In this case, the universe is just the [0,1] hypercube.
-        :return: Tensor of shape (model, 1, zZ, dim) representing [0,1]^d
-        """
-        z = torch.zeros(self.boxes.shape[0], 1, self.boxes.shape[-1])
-        Z = torch.ones(self.boxes.shape[0], 1, self.boxes.shape[-1])
-        return torch.stack((z, Z), dim=2).to(self.boxes.device)
-
 
 class DeltaBoxes(Module):
     """
@@ -216,16 +188,6 @@ class DeltaBoxes(Module):
         :return: Tensor of shape (model, id, zZ, dim).
         """
         return torch.stack((self.z[:, box_indices], self.z[:, box_indices] + torch.exp(self.logdelta[:, box_indices])), dim=2)
-
-
-    def universe_box(self) -> Tensor:
-        """
-        In this case, we calculate the smallest containing box.
-        :return: Tensor of shape (model, 1, zZ, dim)
-        """
-        min_z, _ = torch.min(self.z, dim=1, keepdim=True)
-        max_Z, _ = torch.max(torch.exp(self.logdelta), dim=1, keepdim=True)
-        return torch.stack((min_z, max_Z), dim=2)
 
 
 class SigmoidBoxes(Module):
@@ -269,54 +231,9 @@ class SigmoidBoxes(Module):
         return torch.stack((z,Z), dim=2)
 
 
-    def universe_box(self) -> Tensor:
-        """
-        In this case, the universe is just the [0,1] hypercube.
-        :return: Tensor of shape (model, 1, zZ, dim) representing [0,1]^d
-        """
-        z = torch.zeros(self.w.shape[0], 1, self.w.shape[-1])
-        Z = torch.ones(self.w.shape[0], 1, self.w.shape[-1])
-        return torch.stack((z, Z), dim=2).to(self.w.device)
-
-
 ###############################################
 # Downstream Model
 ###############################################
-
-class CondProbs(Module):
-    def __init__(self, box_embedding: BoxEmbedding, vol_func = clamp_volume):
-        super().__init__()
-        self.box_embedding = box_embedding
-        self.vol_func = vol_func
-
-    def forward(self, box_indices_A: Tensor, box_indices_B: Tensor) -> Dict:
-        A = self.box_embedding(box_indices_A)
-        B = self.box_embedding(box_indices_B)
-        vol_A_int_B = self.vol_func(intersection(A, B))
-        vol_A = self.vol_func(A)
-        return {
-            "A": A,
-            "B": B,
-            "P(B|A)": vol_A_int_B / vol_A,
-        }
-
-
-class UnaryProbs(Module):
-
-    def __init__(self, box_embedding, vol_func: Callable = clamp_volume):
-        super().__init__()
-        self.box_embedding = box_embedding
-        self.vol_func = vol_func
-
-    def forward(self):
-        U = self.box_embedding()
-        vol_U = self.vol_func(U)
-        vol_universe = self.vol_func(self.box_embedding.universe_box())
-        return {
-            "unary_probs": vol_U / vol_universe,
-            "box_embeddings": U,
-        }
-
 
 class WeightedSum(Module):
     def __init__(self, num_models: int) -> None:
@@ -329,21 +246,47 @@ class WeightedSum(Module):
 
 class BoxModel(Module):
     def __init__(self, num_models:int, num_boxes:int, dim:int,
-                 BoxEmbeddingParam: type, vol_func: Callable):
+                 BoxEmbeddingParam: type, vol_func: Callable,
+                 universe_box: Callable = None):
         super().__init__()
         self.box_embedding = BoxEmbeddingParam(num_models, num_boxes, dim)
-        self.unary_probs = UnaryProbs(self.box_embedding, vol_func)
-        self.cond_probs = CondProbs(self.box_embedding, vol_func)
         self.vol_func = vol_func
+
+        if universe_box is None:
+            z = torch.zeros(dim)
+            Z = torch.ones(dim)
+            self.universe_box = lambda _: torch.stack((z,Z))[None, None]
+            self.universe_vol = lambda _: self.vol_func(self.universe_box(None)).squeeze()
+            self.clamp = True
+        else:
+            self.universe_box = universe_box
+            self.universe_vol = lambda b: self.vol_func(self.universe_box(b))
+            self.clamp = False
+
         self.weights = WeightedSum(num_models)
 
     def forward(self, box_indices: Tensor) -> Dict:
-        unary = self.unary_probs()
-        cond = self.cond_probs(box_indices[:,0], box_indices[:,1])
+        # Unary
+        box_embeddings_orig = self.box_embedding()
+        if self.clamp:
+            box_embeddings = box_embeddings_orig.clamp(0,1)
+        else:
+            box_embeddings = box_embeddings_orig
+
+        unary_probs = self.vol_func(box_embeddings)
+
+        # Conditional
+        A = box_embeddings[:, box_indices[:,0]]
+        B = box_embeddings[:, box_indices[:,1]]
+        P_B_given_A = self.vol_func(intersection(A, B)) / (unary_probs[:, box_indices[:,0]] + 1e-38)
+
+        # Scale Unary
+        unary_probs = unary_probs / self.universe_vol(box_embeddings)
+
         return {
-            "unary_probs": self.weights(unary["unary_probs"]),
-            "box_embeddings": unary["box_embeddings"],
-            "A": cond["A"],
-            "B": cond["B"],
-            "P(B|A)": self.weights(cond["P(B|A)"]),
+            "unary_probs": self.weights(unary_probs),
+            "box_embeddings": box_embeddings_orig,
+            "A": A,
+            "B": B,
+            "P(B|A)": self.weights(P_B_given_A),
         }

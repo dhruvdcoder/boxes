@@ -24,6 +24,7 @@ test_case = dict(
     int_boxes =  torch.tensor([[0.3], [0.4]]),
     min_vol = 0.4,
     vol_func = clamp_volume,
+    correct_smallest_containing_box = torch.tensor([[[0.1],[0.8]]]),
     small_boxes = small_boxes,
     boxes_ind = small_boxes,
     volumes = torch.tensor([[0.3, 0.5]]),
@@ -48,9 +49,10 @@ test_case = dict(
     boxparam = unitboxes,
     boxes = unitboxes.boxes,
     ids = torch.tensor([[0,1]]),
-    int_boxes = torch.tensor([[0.3, 0.3], [0.4, 0.7]]),
+    int_boxes = torch.tensor([[[0.3, 0.3], [0.4, 0.7]]]),
     min_vol = 0.1,
     vol_func = clamp_volume,
+    correct_smallest_containing_box = torch.tensor([[[0.1, 0.2], [1.0, 0.9]]]),
     small_boxes = small_boxes,
     boxes_ind = small_boxes,
     volumes = torch.tensor([[0.12, 0.49]]),
@@ -78,6 +80,7 @@ test_case = dict(
     int_boxes = torch.tensor([[0.3, 0.3], [0.2, 0.7]]),
     min_vol = 0.1,
     vol_func = clamp_volume,
+    correct_smallest_containing_box = torch.tensor([[[0.1, 0.2], [1.0, 0.9]]]),
     small_boxes = small_boxes,
     boxes_ind = small_boxes,
     volumes = torch.tensor([[0.04, 0.49]]),
@@ -105,6 +108,7 @@ test_case = dict(
     int_boxes = torch.tensor([[0.1, 0.3], [0.2, 0.7]]),
     min_vol = 0.1,
     vol_func = clamp_volume,
+    correct_smallest_containing_box = torch.tensor([[[0.1, 0.2], [1.0, 0.9]]]),
     small_boxes = small_boxes,
     boxes_ind = small_boxes,
     volumes = torch.tensor([[0.04, 0.63]]),
@@ -179,6 +183,12 @@ def test_pair_ids(boxparam, A, B):
 def test_volume(boxparam, vol_func, volumes):
     out = vol_func(boxparam())
     assert (torch.isclose(out, volumes)).all()
+
+
+@pytest.mark.parametrize(*params_from(test_cases, "boxes", "correct_smallest_containing_box"))
+def test_smallest_containing_box(boxes, correct_smallest_containing_box):
+    out = smallest_containing_box(boxes)
+    assert (correct_smallest_containing_box == out).all()
 
 
 @pytest.mark.parametrize(*params_from(test_cases, "boxparam", "int_boxes", "ids"))

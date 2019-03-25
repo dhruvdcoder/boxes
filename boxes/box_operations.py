@@ -31,6 +31,20 @@ def soft_volume(boxes: Tensor) -> Tensor:
     return torch.prod(F.softplus(boxes[:,:,1] - boxes[:,:,0]), dim=-1)
 
 
+def smallest_containing_box(boxes: Tensor) -> Tensor:
+    """
+    Returns the smallest box which contains all boxes in `boxes`.
+    
+    :param boxes: Box embedding of shape (model, box, zZ, dim)
+    :return: Tensor of shape (model, 1, zZ, dim)
+    """
+    z = boxes[:,:,0]
+    Z = boxes[:,:,1]
+    min_z, _ = torch.min(z, dim=1, keepdim=True)
+    max_Z, _ = torch.max(Z, dim=1, keepdim=True)
+    return torch.stack((min_z, max_Z), dim=2)
+
+
 def detect_small_boxes(boxes: Tensor, vol_func: Callable = clamp_volume, min_vol: float = 1e-20) -> Tensor:
     """
     Returns the indices of boxes with volume smaller than eps.
@@ -94,4 +108,3 @@ def needing_pull_mask(A: Tensor, B: Tensor, target_prob_B_given_A: Tensor) -> Te
 
 def needing_push_mask(A: Tensor, B: Tensor, target_prob_B_given_A: Tensor) -> Tensor:
     return (target_prob_B_given_A != 1) & containing_boxes_mask(A, B)
-
