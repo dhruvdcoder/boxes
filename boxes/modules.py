@@ -120,6 +120,77 @@ class UnitBoxes(Module):
         return torch.stack((z, Z), dim=2).to(self.boxes.device)
 
 
+class MinMaxUnitBoxes(Module):
+    """
+    Parametrize boxes in \RR^d by using 2d coordinates.
+
+    self.boxes[model, box, 2, dim] \in [0,1]
+
+    In this parametrization, we select the z/Z coordinates simply by
+    taking the min/max over axis 2, i.e.
+
+    z, _ = torch.min(self.boxes, dim=2) # Tensor of shape (model, box, dim)
+    Z, _ = torch.max(self.boxes, dim=2) # Tensor of shape (model, box, dim)
+
+    This avoids the need to make sure the boxes don't "flip", i.e. Z becomes smaller than z.
+    """
+
+    def __init__(self, num_models: int, num_boxes: int, dim: int, init_min_vol: float = 1e-2, **kwargs):
+        """
+        Creates the Parameters used for the representation of boxes.
+
+        :param num_models: Number of models
+        :param num_boxes: Number of boxes
+        :param dim: Dimension
+        :param init_min_vol: Creates boxes which a cube of this volume.
+        :param kwargs: Unused for now, but include this for future possible parameters.
+        """
+        super().__init__()
+        rand_param = lambda min, max: min + torch.rand(num_models, num_boxes, dim) * max
+        if init_min_vol == 0:
+            """
+            Uniformly random distribution of coordinates, ensuring
+                Z_j > z_j for all j.
+            """
+            z = rand_param(0, 1)
+            Z = rand_param(z, 1-z)
+        elif init_min_vol > 0:
+            """
+            Uniformly random distribution of coordinates, ensuring that each box
+            contains a cube of volume larger than init_min_vol.
+            Useful in higher dimensions to deal with underflow, however in high
+            dimensions a cube with small volume still has very large side-lengths.
+            """
+            eps = init_min_vol ** (1 / dim)
+            z = rand_param(0, 1-eps)
+            Z = rand_param(z+eps, 1-(z+eps))
+        else:
+            raise ValueError(f"init_min_vol={init_min_vol} is an invalid option.")
+
+        self.boxes = Parameter(torch.stack((z, Z), dim=2))
+
+    def forward(self, box_indices = slice(None, None, None), **kwargs) -> Tensor:
+        """
+        Returns a Tensor representing the box embeddings specified by box_indices.
+
+        :param box_indices: Slice, List, or Tensor of the box indices
+        :param kwargs: Unused for now, but include this for future possible parameters.
+        :return: NamedTensor of shape (model, id, zZ, dim).
+        """
+        z, _ = torch.min(self.boxes[:, box_indices], dim=2) # Tensor of shape (model, box, dim)
+        Z, _ = torch.max(self.boxes[:, box_indices], dim=2) # Tensor of shape (model, box, dim)
+        return torch.stack((z, Z), dim=2)
+
+    def universe_box(self) -> Tensor:
+        """
+        In this case, the universe is just the [0,1] hypercube.
+        :return: Tensor of shape (model, 1, zZ, dim) representing [0,1]^d
+        """
+        z = torch.zeros(self.boxes.shape[0], 1, self.boxes.shape[-1])
+        Z = torch.ones(self.boxes.shape[0], 1, self.boxes.shape[-1])
+        return torch.stack((z, Z), dim=2).to(self.boxes.device)
+
+
 class DeltaBoxes(Module):
     """
     Parametrize boxes using the min coordinate and log of side-length.
