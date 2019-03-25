@@ -4,31 +4,31 @@ import torch.nn.functional as F
 from typing import *
 
 
-def intersection(z:Tensor, Z:Tensor) -> Tuple[Tensor, Tensor]:
+def intersection(A:Tensor, B:Tensor) -> Tensor:
     """
-    :param z: Tensor(model, pair, [A/B], dim)
-    :param Z: Tensor(model, pair, [A/B], dim)
-    :return: Tuple(Tensor(model, pair, dim), Tensor(model,pair,dim)) of min/max of box for A intersect B
+    :param A: Tensor(model, pair, zZ, dim)
+    :param B: Tensor(model, pair, zZ, dim)
+    :return: Tensor(model, pair, zZ, dim), box embeddings for A intersect B
     """
-    z, _ = torch.max(z, dim=2)
-    Z, _ = torch.min(Z, dim=2)
-    return z, Z
+    z = torch.max(A[:,:,0], B[:,:,0])
+    Z = torch.min(A[:,:,1], B[:,:,1])
+    return torch.stack((z, Z), dim=2)
 
 
-def clamp_volume(sidelengths:Tensor) -> Tensor:
+def clamp_volume(boxes: Tensor) -> Tensor:
+    """
+    :param boxes: Tensor(model, box, zZ, dim)
+    :return: Tensor(model, box) of volumes
+    """
+    return torch.prod((boxes[:,:,1] - boxes[:,:,0]).clamp(0), dim=-1)
+
+
+def soft_volume(boxes: Tensor) -> Tensor:
     """
     :param sidelengths: Tensor(model, box, dim)
     :return: Tensor(model, box) of volumes
     """
-    return torch.prod((sidelengths).clamp(0), dim=-1)
-
-
-def soft_volume(sidelengths:Tensor) -> Tensor:
-    """
-    :param sidelengths: Tensor(model, box, dim)
-    :return: Tensor(model, box) of volumes
-    """
-    return torch.prod(F.softplus(sidelengths), dim=-1)
+    return torch.prod(F.softplus(boxes[:,:,1] - boxes[:,:,0]), dim=-1)
 
 
 def detect_small_boxes(boxes: Tensor, vol_func: Callable = clamp_volume, min_vol: float = 1e-20) -> Tensor:
@@ -40,7 +40,7 @@ def detect_small_boxes(boxes: Tensor, vol_func: Callable = clamp_volume, min_vol
     :param min_vol: minimum volume of boxes
     :return: masked tensor which selects boxes whose side lengths are less than min_vol
     """
-    return vol_func(boxes[:,:,1] - boxes[:,:,0]) < min_vol
+    return vol_func(boxes) < min_vol
 
 
 def replace_Z_by_cube(boxes: Tensor, indices: Tensor, cube_vol: float = 1e-20) -> Tensor:
@@ -68,36 +68,30 @@ def replace_Z_by_cube_(boxes: Tensor, indices: Tensor, cube_vol: float = 1e-20) 
     boxes[:, :, 1][indices] = replace_Z_by_cube(boxes, indices, cube_vol)
 
 
-def disjoint_boxes_mask(boxes: Tensor) -> Tensor:
+def disjoint_boxes_mask(A: Tensor, B: Tensor) -> Tensor:
     """
-    Returns a mask for when A and B are disjoint
-    :param boxes:
-    :return:
+    Returns a mask for when A and B are disjoint.
+    Note: This is symmetric with respect to the arguments.
     """
-    A = boxes[:,:,0]
-    B = boxes[:,:,1]
     return ((B[:,:,1] <= A[:,:,0]) | (B[:,:,0] >= A[:,:,1])).any(dim=-1)
 
 
-def overlapping_boxes_mask(boxes: Tensor) -> Tensor:
-    return disjoint_boxes_mask(boxes) ^ 1
+def overlapping_boxes_mask(A: Tensor, B: Tensor) -> Tensor:
+    return disjoint_boxes_mask(A, B) ^ 1
 
 
-def containing_boxes_mask(boxes: Tensor) -> Tensor:
+def containing_boxes_mask(A: Tensor, B: Tensor) -> Tensor:
     """
-    Returns a mask for when B contains A
-    :param boxes:
-    :return:
+    Returns a mask for when B contains A.
+    Note: This is *not* symmetric with respect to it's arguments!
     """
-    A = boxes[:,:,0]
-    B = boxes[:,:,1]
     return ((B[:,:,1] >= A[:,:,1]) & (B[:,:,0] <= A[:,:,0])).all(dim=-1)
 
 
-def needing_pull_mask(boxes: Tensor, target_prob_B_given_A: Tensor) -> Tensor:
-    return (target_prob_B_given_A != 0) & disjoint_boxes_mask(boxes)
+def needing_pull_mask(A: Tensor, B: Tensor, target_prob_B_given_A: Tensor) -> Tensor:
+    return (target_prob_B_given_A != 0) & disjoint_boxes_mask(A, B)
 
 
-def needing_push_mask(boxes: Tensor, target_prob_B_given_A: Tensor) -> Tensor:
-    return (target_prob_B_given_A != 1) & containing_boxes_mask(boxes)
+def needing_push_mask(A: Tensor, B: Tensor, target_prob_B_given_A: Tensor) -> Tensor:
+    return (target_prob_B_given_A != 1) & containing_boxes_mask(A, B)
 

@@ -45,17 +45,19 @@ def metric_pearson_r(model, data_in, data_out):
 
 
 def metric_spearman_r(model, data_in, data_out):
-    return spearman_r(model(data_in)['P(B|A)'], data_out)
+    return spearman_r(model(data_in)["P(B|A)"], data_out)
 
 
 def metric_num_needing_push(model, data_in, data_out):
-    return needing_push_mask(model(data_in)['boxes'], data_out).sum()
+    model_out = model(data_in)
+    return needing_push_mask(model_out["A"], model_out["B"], data_out).sum()
 
 
 def metric_num_needing_pull(model, data_in, data_out):
-    return needing_pull_mask(model(data_in)['boxes'], data_out).sum()
+    model_out = model(data_in)
+    return needing_pull_mask(model_out["A"], model_out["B"], data_out).sum()
 
 
 def metric_hard_accuracy(model, data_in, data_out):
-    hard_pred = model(data_in)['P(B|A)'] > 0.5
+    hard_pred = model(data_in)["P(B|A)"] > 0.5
     return (data_out == hard_pred.float()).float().mean()

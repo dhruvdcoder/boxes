@@ -1,16 +1,13 @@
 import torch
 from torch import Tensor
-from namedtensor import ntorch, NamedTensor
-from namedtensor.nn.torch_nn import Module
+from torch.nn import Module, Parameter
 import torch.nn.functional as F
 from .box_operations import *
 
-from torch.nn import Parameter
 
 ################################################
 # Box Embedding Layers
 ################################################
-
 
 class BoxEmbedding(Module):
     """
@@ -33,16 +30,16 @@ class BoxEmbedding(Module):
         """
         # Remember to call:
         super().__init__()
-        pass
+        raise NotImplemented
 
 
-    def forward(self, box_indices: Union[NamedTensor, None] = None, **kwargs) -> NamedTensor:
+    def forward(self, box_indices = slice(None, None, None), **kwargs) -> Tensor:
         """
         Returns a Tensor representing the boxes specified by `box_indices` in the form they should be used for training.
 
-        :param box_indices: A NamedTensor of the box indices
+        :param box_indices: Slice, List, or Tensor of the box indices
         :param kwargs: Unused for now, but include this for future possible parameters.
-        :return: NamedTensor of shape (model, id, zZ, dim).
+        :return: Tensor of shape (model, id, zZ, dim).
         """
         raise NotImplemented
 
@@ -52,7 +49,7 @@ class BoxEmbedding(Module):
             - For boxes which enforce a parametrization in the unit cube, this is simply the unit cube.
             - For boxes which allow a dynamic universe, this is typically the smallest containing box.
 
-        :return: NamedTensor of shape (model, zZ, dim)
+        :return: Tensor of shape (model, 1, zZ, dim)
         """
         raise NotImplemented
 
@@ -80,7 +77,7 @@ class UnitBoxes(Module):
         :param kwargs: Unused for now, but include this for future possible parameters.
         """
         super().__init__()
-        rand_param = lambda min, max: min + ntorch.rand(num_models, num_boxes, dim, names=("model", "box", "dim")) * max
+        rand_param = lambda min, max: min + torch.rand(num_models, num_boxes, dim) * max
         if init_min_vol == 0:
             """
             Uniformly random distribution of coordinates, ensuring
@@ -101,33 +98,26 @@ class UnitBoxes(Module):
         else:
             raise ValueError(f"init_min_vol={init_min_vol} is an invalid option.")
 
-        self.boxes = ntorch.stack((z,Z), "zZ")
-        # We have to use self.register_parameter instead of Paramter because namedtensor doesn't currently support the latter.
-        self.register_parameter("boxes", self.boxes)
+        self.boxes = Parameter(torch.stack((z, Z), dim=2))
 
-    def forward(self, box_indices: Union[NamedTensor, None] = None, **kwargs):
+    def forward(self, box_indices = slice(None, None, None), **kwargs) -> Tensor:
         """
         Returns a Tensor representing the box embeddings specified by box_indices.
 
-        :param box_indices: A NamedTensor of the box indices
+        :param box_indices: Slice, List, or Tensor of the box indices
         :param kwargs: Unused for now, but include this for future possible parameters.
         :return: NamedTensor of shape (model, id, zZ, dim).
         """
-        # We have to use this branching condition because namedtensor doesn't currently support slice(None, None, None)
-        if box_indices is None:
-            return self.boxes
-        else:
-            return self.boxes[{"box": box_indices}]
+        return self.boxes[:, box_indices]
 
-    def universe_box(self):
+    def universe_box(self) -> Tensor:
         """
         In this case, the universe is just the [0,1] hypercube.
-        :return: NamedTensor of shape (model, zZ, dim) representing [0,1]^d
+        :return: Tensor of shape (model, 1, zZ, dim) representing [0,1]^d
         """
-        named_dims = self.boxes.shape
-        z = ntorch.zeros(named_dims["model"], named_dims["dim"])
-        Z = ntorch.ones(named_dims["model"], named_dims["dim"])
-        return ntorch.stack((z,Z), name="zZ")
+        z = torch.zeros(self.boxes.shape[0], 1, self.boxes.shape[-1])
+        Z = torch.ones(self.boxes.shape[0], 1, self.boxes.shape[-1])
+        return torch.stack((z, Z), dim=2).to(self.boxes.device)
 
 
 class DeltaBoxes(Module):
@@ -142,49 +132,68 @@ class DeltaBoxes(Module):
 
     def __init__(self, num_models: int, num_boxes: int, dim: int, **kwargs):
         super().__init__()
-        self.z = ntorch.rand(num_models, num_boxes, dim, names=("model", "box", "dim"))
-        self.logdelta = ntorch.rand(num_models, num_boxes, dim, names=("model", "box", "dim"))
-        self.register_parameter("z", self.z)
-        self.register_parameter("logdelta", self.logdelta)
+        self.z = Parameter(torch.rand(num_models, num_boxes, dim))
+        self.logdelta = Parameter(torch.rand(num_models, num_boxes, dim))
 
 
-    def forward(self, box_indices: Union[NamedTensor, None] = None, **kwargs):
+    def forward(self, box_indices = slice(None, None, None), **kwargs) -> Tensor:
         """
         Returns a Tensor representing the box embeddings specified by box_indices.
 
         :param box_indices: A NamedTensor of the box indices
         :param kwargs: Unused for now, but include this for future possible parameters.
-        :return: NamedTensor of shape (model, id, zZ, dim).
+        :return: Tensor of shape (model, id, zZ, dim).
         """
-        # We have to use this branching condition because namedtensor doesn't currently support slice(None, None, None)
-        if box_indices is None:
-            return ntorch.stack((self.z, self.z + self.Z()), "zZ")
-        else:
-            return ntorch.stack((self.z[{"box": box_indices}], self.z[{"box": box_indices}] + self.Z(box_indices)), "zZ")
-
-    def Z(self, box_indices: Union[NamedTensor, None] = None, **kwargs):
-        """
-        Returns a Tensor representing the max coordinate of boxes specified by ids as they should be used for training.
-
-        :param box_indices: A NamedTensor of the box indices
-        :param kwargs: Unused for now, but include this for future possible parameters.
-        :return: NamedTensor of shape (model, id, dim).
-        """
-        if box_indices is None:
-            return self.z + ntorch.exp(self.logdelta)
-        else:
-            return self.z[{"box": box_indices}] + ntorch.exp(self.logdelta[{"box": box_indices}])
+        return torch.stack((self.z[:, box_indices], self.z[:, box_indices] + torch.exp(self.logdelta[:, box_indices])), dim=2)
 
 
-    def universe_box(self):
+    def universe_box(self) -> Tensor:
         """
-        In this case, the universe is just the [0,1] hypercube.
-        :return: NamedTensor of shape (model, zZ, dim) representing [0,1]^d
+        In this case, we calculate the smallest containing box.
+        :return: Tensor of shape (model, 1, zZ, dim)
         """
-        named_dims = self.boxes.shape
-        z = ntorch.zeros(named_dims["model"], named_dims["dim"])
-        Z = ntorch.ones(named_dims["model"], named_dims["dim"])
-        return ntorch.stack((z,Z), name="zZ")
+        min_z, _ = torch.min(self.z, dim=1, keepdim=True)
+        max_Z, _ = torch.max(torch.exp(self.logdelta), dim=1, keepdim=True)
+        return torch.stack((min_z, max_Z), dim=2)
+
+
+###############################################
+# Downstream Model
+###############################################
+
+class CondProbs(Module):
+    def __init__(self, box_embedding: BoxEmbedding, vol_func = clamp_volume):
+        super().__init__()
+        self.box_embedding = box_embedding
+        self.vol_func = vol_func
+
+    def forward(self, box_indices_A: Tensor, box_indices_B: Tensor) -> Dict:
+        A = self.box_embedding(box_indices_A)
+        B = self.box_embedding(box_indices_B)
+        vol_A_int_B = self.vol_func(intersection(A, B))
+        vol_A = self.vol_func(A)
+        return {
+            "A": A,
+            "B": B,
+            "P(B|A)": vol_A_int_B / vol_A,
+        }
+
+
+class UnaryProbs(Module):
+
+    def __init__(self, box_embedding, vol_func: Callable = clamp_volume):
+        super().__init__()
+        self.box_embedding = box_embedding
+        self.vol_func = vol_func
+
+    def forward(self):
+        U = self.box_embedding()
+        vol_U = self.vol_func(U)
+        vol_universe = self.vol_func(self.box_embedding.universe_box())
+        return {
+            "unary_probs": vol_U / vol_universe,
+            "box_embeddings": U,
+        }
 
 
 class WeightedSum(Module):
@@ -196,47 +205,23 @@ class WeightedSum(Module):
         return (F.softmax(self.weights, dim=0).unsqueeze(0) @ box_vols).squeeze()
 
 
-class CondProbs(Module):
-    def __init__(self, box_embedding: BoxEmbedding, vol_func = clamp_volume):
-        super().__init__()
-        self.box_embedding = box_embedding
-        self.vol = vol_func
-
-    def forward(self, ids):
-        A = self.box_embedding(ids[0])
-        B = self.box_embedding(ids[1])
-        vol_A_int_B = self.vol_func(intersection(A, B))
-        vol_A = self.vol_func(A)
-        return {
-            'P(B|A)': vol_A_int_B / vol_A,
-            'A': A,
-            'B': B,
-        }
-
-
-class UnaryProbs(Module):
-
-    def __init__(self, box_embedding: BoxEmbedding, vol_func = clamp_volume):
-        super().__init__()
-        self.box_embedding = box_embedding
-        self.vol = vol_func
-
-    def forward(self):
-        U = self.box_embedding()
-        vol_U = self.vol_func(U)
-        vol_universe = self.vol_func(self.box_embedding.universe_box())
-        return {
-            'unary_probs': vol_U / vol_universe,
-            'box_embeddings': U,
-        }
-
 class BoxModel(Module):
     def __init__(self, num_models:int, num_boxes:int, dim:int,
-                 BoxEmbeddingParam = UnitBoxes, vol_func = clamp_volume):
+                 BoxEmbeddingParam: type, vol_func: Callable):
         super().__init__()
         self.box_embedding = BoxEmbeddingParam(num_models, num_boxes, dim)
-        self.unaryprobs = UnaryProbs(self.box_embedding)
-        self.condprobs = CondProbs(self.box_embedding)
-        self.vol = vol_func
+        self.unary_probs = UnaryProbs(self.box_embedding, vol_func)
+        self.cond_probs = CondProbs(self.box_embedding, vol_func)
+        self.vol_func = vol_func
         self.weights = WeightedSum(num_models)
 
+    def forward(self, box_indices: Tensor) -> Dict:
+        unary = self.unary_probs()
+        cond = self.cond_probs(box_indices[:,0], box_indices[:,1])
+        return {
+            "unary_probs": self.weights(unary["unary_probs"]),
+            "box_embeddings": unary["box_embeddings"],
+            "A": cond["A"],
+            "B": cond["B"],
+            "P(B|A)": self.weights(cond["P(B|A)"]),
+        }

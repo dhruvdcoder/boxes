@@ -73,19 +73,19 @@ class MinBoxSize(Callback):
 
     def batch_end(self, l: Learner):
         with torch.no_grad():
-            boxes = l.model.boxes.boxes
-            small_boxes = detect_small_boxes(boxes, l.model.vol, self.min_vol)
+            boxes = l.model.box_embedding.boxes
+            small_boxes = detect_small_boxes(boxes, l.model.vol_func, self.min_vol)
             num_min_boxes = small_boxes.sum().detach().cpu().item()
             if self.recorder is not None:
                 self.recorder.update_({self.name + f" (<{self.min_vol} before MinBoxSize)": num_min_boxes}, l.progress.partial_epoch_progress())
-                self.recorder.update_({self.name + f" (<{self.min_vol - self.eps} before MinBoxSize)": detect_small_boxes(boxes, l.model.vol, self.min_vol - self.eps).sum().detach().cpu().item()}, l.progress.partial_epoch_progress())
+                self.recorder.update_({self.name + f" (<{self.min_vol - self.eps} before MinBoxSize)": detect_small_boxes(boxes, l.model.vol_func, self.min_vol - self.eps).sum()}, l.progress.partial_epoch_progress())
             if num_min_boxes > 0:
                 replace_Z_by_cube_(boxes, small_boxes, self.min_vol + self.eps)
-            small_boxes = detect_small_boxes(boxes, l.model.vol, self.min_vol)
+            small_boxes = detect_small_boxes(boxes, l.model.vol_func, self.min_vol)
             num_min_boxes = small_boxes.sum().detach().cpu().item()
             if self.recorder is not None:
                 self.recorder.update_({self.name + f" (<{self.min_vol} after MinBoxSize)": num_min_boxes}, l.progress.partial_epoch_progress())
-                self.recorder.update_({self.name + f" (<{self.min_vol - self.eps} after MinBoxSize)": detect_small_boxes(boxes, l.model.vol, self.min_vol - self.eps).sum().detach().cpu().item()}, l.progress.partial_epoch_progress())
+                self.recorder.update_({self.name + f" (<{self.min_vol - self.eps} after MinBoxSize)": detect_small_boxes(boxes, l.model.vol_func, self.min_vol - self.eps).sum()}, l.progress.partial_epoch_progress())
 
 
 @dataclass
@@ -94,7 +94,7 @@ class LossCallback(Callback):
     ds: Dataset
 
     @torch.no_grad()
-    def epoch_end(self, l: Learner):
+    def epoch_begin(self, l: Learner):
         data_in, data_out = self.ds[:]
         output = l.model(data_in)
         l.loss_fn(output, data_out, l, self.recorder) # this logs the data to the recorder
@@ -113,7 +113,7 @@ class MetricCallback(Callback):
         self.name = self.recorder.get_unique_name(self.name)
 
     @torch.no_grad()
-    def epoch_end(self, l: Learner):
+    def epoch_begin(self, l: Learner):
         data_in, data_out = self.ds[:]
         metric_val = self.metric(l.model, data_in, data_out)
         self.recorder.update_({self.name: metric_val}, l.progress.current_epoch_iter)

@@ -61,12 +61,12 @@ class LossPieces:
 
 
 def mean_unit_cube_loss(model_out, _):
-    return ((model_out['all_boxes'] - 1).clamp(0) + (-model_out['all_boxes']).clamp(0)).sum(dim=[-2, -1]).mean()
+    return ((model_out["box_embeddings"] - 1).clamp(0) + (-model_out["box_embeddings"]).clamp(0)).sum(dim=[-2, -1]).mean()
 
 
 def mean_unary_kl_loss(unary, eps=1e-38):
     def mean_unary_kl_loss(model_out, _):
-        return kl_div_sym(model_out["unary_vol"], unary, eps).mean()
+        return kl_div_sym(model_out["unary_probs"], unary, eps).mean()
     return mean_unary_kl_loss
 
 
@@ -86,26 +86,22 @@ def mean_pull_loss(model_out, target, eps=1e-6):
     """
     Pulls together boxes which are disjoint but should overlap.
     """
-    boxes = model_out['boxes']
-    _needing_pull_mask = needing_pull_mask(boxes, target)
+    A, B = model_out["A"], model_out["B"]
+    _needing_pull_mask = needing_pull_mask(A, B, target)
     num_needing_pull_mask = _needing_pull_mask.sum()
     if num_needing_pull_mask == 0:
         return 0
     else:
-        A = boxes[:,:,0]
-        B = boxes[:,:,1]
         penalty = ((A[:,:,0] - B[:,:,1] + eps).clamp(0) + (B[:,:,0] - A[:,:,1] + eps).clamp(0)).sum(dim=-1)
         return penalty[_needing_pull_mask].sum() / num_needing_pull_mask
 
 
 def mean_push_loss(model_out, target, eps=1e-6):
-    boxes = model_out['boxes']
-    _needing_push_mask = needing_push_mask(boxes, target)
+    A, B = model_out["A"], model_out["B"]
+    _needing_push_mask = needing_push_mask(A, B, target)
     num_needing_push_mask = _needing_push_mask.sum()
     if num_needing_push_mask == 0:
         return 0
     else:
-        A = boxes[:,:,0]
-        B = boxes[:,:,1]
         penalty = torch.min((A[:,:,1] - B[:,:,1] + eps).clamp(0).min(dim=-1)[0], (A[:,:,0] - B[:,:,0] + eps).clamp(0).min(dim=-1)[0])
         return penalty[_needing_push_mask].sum() / num_needing_push_mask

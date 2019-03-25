@@ -2,6 +2,7 @@ import pytest
 from hypothesis import given, example
 from hypothesis import strategies as st
 from .box_operations import *
+from .modules import *
 import copy
 
 test_cases = dict()
@@ -20,7 +21,7 @@ test_case = dict(
     boxparam = unitboxes,
     boxes = unitboxes.boxes,
     ids = torch.tensor([[0,1]]),
-    int_boxes =  (torch.tensor([0.3]), torch.tensor([0.4])),
+    int_boxes =  torch.tensor([[0.3], [0.4]]),
     min_vol = 0.4,
     vol_func = clamp_volume,
     small_boxes = small_boxes,
@@ -47,7 +48,7 @@ test_case = dict(
     boxparam = unitboxes,
     boxes = unitboxes.boxes,
     ids = torch.tensor([[0,1]]),
-    int_boxes = (torch.tensor([0.3, 0.3]), torch.tensor([0.4, 0.7])),
+    int_boxes = torch.tensor([[0.3, 0.3], [0.4, 0.7]]),
     min_vol = 0.1,
     vol_func = clamp_volume,
     small_boxes = small_boxes,
@@ -74,7 +75,7 @@ test_case = dict(
     boxparam = unitboxes,
     boxes = unitboxes.boxes,
     ids = torch.tensor([[0,1]]),
-    int_boxes = (torch.tensor([0.3, 0.3]), torch.tensor([0.2, 0.7])),
+    int_boxes = torch.tensor([[0.3, 0.3], [0.2, 0.7]]),
     min_vol = 0.1,
     vol_func = clamp_volume,
     small_boxes = small_boxes,
@@ -101,7 +102,7 @@ test_case = dict(
     boxparam = unitboxes,
     boxes = unitboxes.boxes,
     ids = torch.tensor([[0,1]]),
-    int_boxes = (torch.tensor([0.1, 0.3]), torch.tensor([0.2, 0.7])),
+    int_boxes = torch.tensor([[0.1, 0.3], [0.2, 0.7]]),
     min_vol = 0.1,
     vol_func = clamp_volume,
     small_boxes = small_boxes,
@@ -176,73 +177,68 @@ def test_pair_ids(boxparam, A, B):
 
 @pytest.mark.parametrize(*params_from(test_cases, "boxparam", "vol_func", "volumes"))
 def test_volume(boxparam, vol_func, volumes):
-    z = boxparam.min()
-    Z = boxparam.max()
-    out = vol_func(Z - z)
+    out = vol_func(boxparam())
     assert (torch.isclose(out, volumes)).all()
 
 
 @pytest.mark.parametrize(*params_from(test_cases, "boxparam", "int_boxes", "ids"))
 def test_intersection_boxes(boxparam, int_boxes, ids):
-    z = boxparam.min(ids)
-    Z = boxparam.max(ids)
-    int_z, int_Z = int_boxes
-    out_z, out_Z = intersection(z, Z)
-    assert (out_z == int_z).all()
-    assert (out_Z == int_Z).all()
+    out_boxes = intersection(boxparam(ids[:,0]), boxparam(ids[:,1]))
+    assert (int_boxes == out_boxes).all()
 
 
 @pytest.mark.parametrize(*params_from(test_cases, "boxparam", "vol_func", "min_vol", "small_boxes"))
 def test_detect_small_boxes(boxparam, vol_func, min_vol, small_boxes):
-    out = detect_small_boxes(boxparam.boxes, vol_func, min_vol)
+    out = detect_small_boxes(boxparam(), vol_func, min_vol)
     assert (out == small_boxes).all()
 
 
 @pytest.mark.parametrize(*params_from(test_cases, "boxparam", "boxes_ind", "min_vol", "vol_func"))
 def test_replace_Z_by_cube(boxparam, boxes_ind, min_vol, vol_func):
-    out = replace_Z_by_cube(boxparam.boxes, boxes_ind, min_vol)
-    assert torch.isclose(vol_func(out - boxparam.min()[boxes_ind]), torch.tensor(min_vol)).all()
+    out = replace_Z_by_cube(boxparam(), boxes_ind, min_vol)
+    new_boxes = torch.stack((boxparam()[:,:,0][boxes_ind], out), dim=2)
+    assert torch.isclose(vol_func(new_boxes), torch.tensor(min_vol)).all()
 
 
 @pytest.mark.parametrize(*params_from(test_cases, "boxparam", "boxes_ind", "min_vol", "vol_func"))
 def test_replace_Z_by_cube_(boxparam, boxes_ind, min_vol, vol_func):
     boxparam = copy.deepcopy(boxparam) # This is *not* the best way to do this, should use a fixture
     replace_Z_by_cube_(boxparam.boxes, boxes_ind, min_vol)
-    assert (vol_func(boxparam.max() - boxparam.min()) >= min_vol - 1e-8).all()
-    assert detect_small_boxes(boxparam.boxes, vol_func, min_vol - 1e-8).sum() == 0
+    assert (vol_func(boxparam()) >= min_vol - 1e-8).all()
+    assert detect_small_boxes(boxparam(), vol_func, min_vol - 1e-8).sum() == 0
 
 
 @pytest.mark.parametrize(*params_from(test_cases, "boxparam", "ids", "disjoint_boxes"))
 def test_disjoint_boxes_mask(boxparam, ids, disjoint_boxes):
-    out = disjoint_boxes_mask(boxparam(ids))
+    out = disjoint_boxes_mask(boxparam(ids[:,0]), boxparam(ids[:,1]))
     assert (out == disjoint_boxes).all()
     assert out.shape == disjoint_boxes.shape
 
 
 @pytest.mark.parametrize(*params_from(test_cases, "boxparam", "ids", "overlapping_boxes"))
 def test_overlapping_boxes_mask(boxparam, ids, overlapping_boxes):
-    out = overlapping_boxes_mask(boxparam(ids))
+    out = overlapping_boxes_mask(boxparam(ids[:,0]), boxparam(ids[:,1]))
     assert (out == overlapping_boxes).all()
     assert out.shape == overlapping_boxes.shape
 
 
 @pytest.mark.parametrize(*params_from(test_cases, "boxparam", "ids", "containing_boxes"))
 def test_containing_boxes_mask(boxparam, ids, containing_boxes):
-    out = containing_boxes_mask(boxparam(ids))
+    out = containing_boxes_mask(boxparam(ids[:,0]), boxparam(ids[:,1]))
     assert (out == containing_boxes).all()
     assert out.shape == containing_boxes.shape
 
 
 @pytest.mark.parametrize(*params_from(test_cases, "boxparam", "ids", "probs", "needing_push"))
 def needing_push_mask(boxparam, ids, probs, needing_push):
-    out = needing_push_mask(boxparam(ids), probs)
+    out = needing_push_mask(boxparam(ids[:,0]), boxparam(ids[:,1]), probs)
     assert (out == needing_push).all()
     assert out.shape == needing_push.shape
 
 
 @pytest.mark.parametrize(*params_from(test_cases, "boxparam", "ids", "probs", "needing_pull"))
 def test_needing_pull_mask(boxparam, ids, probs, needing_pull):
-    out = needing_pull_mask(boxparam(ids), probs)
+    out = needing_pull_mask(boxparam(ids[:,0]), boxparam(ids[:,1]), probs)
     assert (out == needing_pull).all()
     assert out.shape == needing_pull.shape
 
@@ -251,8 +247,9 @@ def test_needing_pull_mask(boxparam, ids, probs, needing_pull):
 def test_unitboxes_replace_Z_by_cube(num_models, num_boxes, dim, min_vol):
     unitboxes = UnitBoxes(num_models, num_boxes, dim)
     small_boxes = detect_small_boxes(unitboxes.boxes, clamp_volume, min_vol)
-    Z = replace_Z_by_cube(unitboxes.boxes, small_boxes, min_vol)
-    assert (clamp_volume(Z - unitboxes.min()[small_boxes]) >= min_vol-1e-6).all()
+    out = replace_Z_by_cube(unitboxes.boxes, small_boxes, min_vol)
+    new_boxes = torch.stack((unitboxes()[:,:,0][small_boxes], out), dim=2)
+    assert (clamp_volume(new_boxes) >= min_vol-1e-6).all()
 
 
 @given(num_models=st.integers(1,10), num_boxes=st.integers(1,1000), dim=st.integers(1,100), min_vol=st.floats(1e-6,1e-1))
