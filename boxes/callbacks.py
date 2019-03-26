@@ -92,12 +92,17 @@ class MinBoxSize(Callback):
 class LossCallback(Callback):
     recorder: Recorder
     ds: Dataset
+    weighted: bool = True
 
     @torch.no_grad()
-    def epoch_begin(self, l: Learner):
+    def train_begin(self, learner: Learner):
+        self.epoch_end(learner)
+
+    @torch.no_grad()
+    def epoch_end(self, l: Learner):
         data_in, data_out = self.ds[:]
         output = l.model(data_in)
-        l.loss_fn(output, data_out, l, self.recorder) # this logs the data to the recorder
+        l.loss_fn(output, data_out, l, self.recorder, weighted=self.weighted) # this logs the data to the recorder
 
 
 @dataclass
@@ -113,7 +118,11 @@ class MetricCallback(Callback):
         self.name = self.recorder.get_unique_name(self.name)
 
     @torch.no_grad()
-    def epoch_begin(self, l: Learner):
+    def train_begin(self, learner: Learner):
+        self.epoch_end(learner)
+
+    @torch.no_grad()
+    def epoch_end(self, l: Learner):
         data_in, data_out = self.ds[:]
         metric_val = self.metric(l.model, data_in, data_out)
         self.recorder.update_({self.name: metric_val}, l.progress.current_epoch_iter)

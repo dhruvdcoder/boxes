@@ -5,6 +5,7 @@ from typing import *
 from .learner import Learner, Recorder
 from collections import OrderedDict
 from .box_operations import *
+import math
 
 
 def func_list_to_dict(*func_list) -> Dict[str, Callable]:
@@ -26,6 +27,15 @@ def func_list_to_dict(*func_list) -> Dict[str, Callable]:
             func_dict[f.__name__] = f
     return func_dict
 
+def unweighted_func_dict(*func_list) -> Dict[str, Callable]:
+    if type(func_list) == OrderedDict or type(func_list) == dict:
+        return func_list
+    func_dict = OrderedDict()
+    for f in func_list:
+        if type(f) is tuple:
+            f = f[1]
+        func_dict[f.__name__] = f
+    return func_dict
 
 class LossPieces:
 
@@ -35,18 +45,23 @@ class LossPieces:
         :param functions: List of functions or tuples (weight, function)
         :type functions: Collection[Union[Callable, Tuple[float, Callable]]]
         """
+        self.unweighted_funcs = unweighted_func_dict(*loss_funcs)
         self.loss_funcs = func_list_to_dict(*loss_funcs)
 
-    def loss_func(self, model_out: Tensor, true_out: Tensor, learner: Learner = None, recorder: Recorder = None) -> Tensor:
+    def loss_func(self, model_out: Tensor, true_out: Tensor, learner: Learner = None, recorder: Recorder = None, weighted = True) -> Tensor:
         """
         Weighted sum of all loss functions. Tracks values in Recorder.
 
         """
+        if weighted:
+            loss_funcs = self.loss_funcs
+        else:
+            loss_funcs = self.unweighted_funcs
         grad_status = torch.is_grad_enabled()
         if learner is None:
             torch.set_grad_enabled(False)
         try:
-            loss_pieces = {k: l(model_out, true_out) for k, l in self.loss_funcs.items()}
+            loss_pieces = {k: l(model_out, true_out) for k, l in loss_funcs.items()}
             # Note: don't want to detach / move / unwrap tensors here because we have to sum the loss first:
             loss = sum(loss_pieces.values())
             loss_pieces['loss'] = loss
