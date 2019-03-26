@@ -226,8 +226,8 @@ class SigmoidBoxes(Module):
         :param kwargs: Unused for now, but include this for future possible parameters.
         :return: Tensor of shape (model, id, zZ, dim).
         """
-        z = F.sigmoid(self.w[:, box_indices])
-        Z = z + F.sigmoid(self.W[:, box_indices]) * (1-z)
+        z = torch.sigmoid(self.w[:, box_indices])
+        Z = z + torch.sigmoid(self.W[:, box_indices]) * (1-z)
         return torch.stack((z,Z), dim=2)
 
 
