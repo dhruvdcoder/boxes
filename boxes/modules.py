@@ -6,14 +6,14 @@ from .box_operations import *
 
 
 ################################################
-# Box Embedding Layers
+# Box Parametrization Layers
 ################################################
 
-class BoxEmbedding(Module):
+class BoxParam(Module):
     """
-    An example class for creating a Box Embedding parametrization.
-    Don't inherit from this, it is just an example which contains the methods for a class to be used as a BoxEmbedding
-    layer. Refer to the docstring of the functions when implementing your own BoxEmbedding.
+    An example class for creating a box parametrization.
+    Don't inherit from this, it is just an example which contains the methods for a class to be used as a BoxParam
+    layer. Refer to the docstring of the functions when implementing your own BoxParam.
 
     Note: to avoid naming conflicts with min/max functions, we refer to the min coordinate for a box as `z`, and the
     max coordinate as `Z`.
