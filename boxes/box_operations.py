@@ -20,7 +20,7 @@ def clamp_volume(boxes: Tensor) -> Tensor:
     :param boxes: Tensor(model, box, zZ, dim)
     :return: Tensor(model, box) of volumes
     """
-    return torch.prod((boxes[:,:,1] - boxes[:,:,0]).clamp(0), dim=-1)
+    return torch.prod((boxes[:,:,1] - boxes[:,:,0]).clamp_min(0), dim=-1)
 
 
 def soft_volume(boxes: Tensor) -> Tensor:
@@ -42,6 +42,21 @@ def smallest_containing_box(boxes: Tensor) -> Tensor:
     Z = boxes[:,:,1]
     min_z, _ = torch.min(z, dim=1, keepdim=True)
     max_Z, _ = torch.max(Z, dim=1, keepdim=True)
+    return torch.stack((min_z, max_Z), dim=2)
+
+def smallest_containing_box_outside_unit_cube(boxes: Tensor) -> Tensor:
+    """
+    Returns the smallest box which contains all boxes in `boxes` and the unit cube.
+
+    :param boxes: Box embedding of shape (model, box, zZ, dim)
+    :return: Tensor of shape (model, 1, zZ, dim)
+    """
+    z = boxes[:,:,0]
+    Z = boxes[:,:,1]
+    min_z, _ = torch.min(z, dim=1, keepdim=True)
+    max_Z, _ = torch.max(Z, dim=1, keepdim=True)
+    min_z.clamp_max(0)
+    max_Z.clamp_min(1)
     return torch.stack((min_z, max_Z), dim=2)
 
 
