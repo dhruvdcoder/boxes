@@ -3,7 +3,6 @@ from torch import Tensor
 from torch.nn import Module, Parameter
 import torch.nn.functional as F
 from .box_operations import *
-from .utils import *
 
 
 ################################################
