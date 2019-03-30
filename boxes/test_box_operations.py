@@ -7,10 +7,10 @@ import copy
 
 test_cases = dict()
 
-# UnitBoxes(1,2,1)
+# Boxes(1,2,1)
 A = torch.tensor([[0.1], [0.4]])
 B = torch.tensor([[0.3], [0.8]])
-unitboxes = UnitBoxes(1,2,1)
+unitboxes = Boxes(1, 2, 1)
 unitboxes.boxes[0,0] = A
 unitboxes.boxes[0,1] = B
 small_boxes = torch.tensor([[1,0]], dtype=torch.uint8)
@@ -32,13 +32,13 @@ test_case = dict(
     overlapping_boxes = torch.tensor([[1]], dtype=torch.uint8),
     containing_boxes = torch.tensor([[0]], dtype=torch.uint8),
 )
-test_cases["UnitBoxes(1,2,1)"] = test_case
+test_cases["Boxes(1,2,1)"] = test_case
 
 
-# UnitBoxes(1,2,2)
+# Boxes(1,2,2)
 A = torch.tensor([[0.1, 0.3], [0.4, 0.7]])
 B = torch.tensor([[0.3, 0.2], [1.0, 0.9]])
-unitboxes = UnitBoxes(1,2,2)
+unitboxes = Boxes(1, 2, 2)
 unitboxes.boxes[0,0] = A
 unitboxes.boxes[0,1] = B
 small_boxes = torch.tensor([[0,0]], dtype=torch.uint8)
@@ -60,13 +60,13 @@ test_case = dict(
     overlapping_boxes = torch.tensor([[1]], dtype=torch.uint8),
     containing_boxes = torch.tensor([[0]], dtype=torch.uint8),
 )
-test_cases["UnitBoxes(1,2,2)"] = test_case
+test_cases["Boxes(1,2,2)"] = test_case
 
 
-# UnitBoxes(1,2,2) disjoint in one dimension
+# Boxes(1,2,2) disjoint in one dimension
 A = torch.tensor([[0.1, 0.3], [0.2, 0.7]])
 B = torch.tensor([[0.3, 0.2], [1.0, 0.9]])
-unitboxes = UnitBoxes(1,2,2)
+unitboxes = Boxes(1, 2, 2)
 unitboxes.boxes[0,0] = A
 unitboxes.boxes[0,1] = B
 small_boxes = torch.tensor([[1,0]], dtype=torch.uint8)
@@ -88,13 +88,13 @@ test_case = dict(
     overlapping_boxes = torch.tensor([[0]], dtype=torch.uint8),
     containing_boxes = torch.tensor([[0]], dtype=torch.uint8),
 )
-test_cases["UnitBoxes(1,2,2) disjoint"] = test_case
+test_cases["Boxes(1,2,2) disjoint"] = test_case
 
 
-# UnitBoxes(1,2,2) contained
+# Boxes(1,2,2) contained
 A = torch.tensor([[0.1, 0.3], [0.2, 0.7]])
 B = torch.tensor([[0.1, 0.2], [1.0, 0.9]])
-unitboxes = UnitBoxes(1,2,2)
+unitboxes = Boxes(1, 2, 2)
 unitboxes.boxes[0,0] = A
 unitboxes.boxes[0,1] = B
 small_boxes = torch.tensor([[1,0]], dtype=torch.uint8)
@@ -116,11 +116,11 @@ test_case = dict(
     overlapping_boxes = torch.tensor([[1]], dtype=torch.uint8),
     containing_boxes = torch.tensor([[1]], dtype=torch.uint8),
 )
-test_cases["UnitBoxes(1,2,2) contained"] = test_case
+test_cases["Boxes(1,2,2) contained"] = test_case
 
 
-# UnitBoxes(1,3,2) Intersection Possibilities
-unitboxes = UnitBoxes(1,4,1)
+# Boxes(1,3,2) Intersection Possibilities
+unitboxes = Boxes(1, 4, 1)
 unitboxes.boxes.data = torch.tensor([
     [[0.1], [0.4]], #0
     [[0.5], [0.8]], #1
@@ -140,7 +140,7 @@ test_case = dict(
     needing_push = torch.tensor([[0,0,0,0,0,0,1,1,0]], dtype=torch.uint8),
     needing_pull = torch.tensor([[0,1,1,0,0,0,0,0,0]], dtype=torch.uint8),
 )
-test_cases["UnitBoxes(1,3,2) Intersection Possibilities"] = test_case
+test_cases["Boxes(1,3,2) Intersection Possibilities"] = test_case
 
 def skip_unless_parameters_exist(**kwargs):
     missing_vars = []
@@ -255,7 +255,7 @@ def test_needing_pull_mask(boxparam, ids, probs, needing_pull):
 
 @given(num_models=st.integers(1,10), num_boxes=st.integers(1,1000), dim=st.integers(1,100), min_vol=st.floats(1e-6,1e-1))
 def test_unitboxes_replace_Z_by_cube(num_models, num_boxes, dim, min_vol):
-    unitboxes = UnitBoxes(num_models, num_boxes, dim)
+    unitboxes = Boxes(num_models, num_boxes, dim)
     small_boxes = detect_small_boxes(unitboxes.boxes, clamp_volume, min_vol)
     out = replace_Z_by_cube(unitboxes.boxes, small_boxes, min_vol)
     new_boxes = torch.stack((unitboxes()[:,:,0][small_boxes], out), dim=2)
@@ -264,7 +264,7 @@ def test_unitboxes_replace_Z_by_cube(num_models, num_boxes, dim, min_vol):
 
 @given(num_models=st.integers(1,10), num_boxes=st.integers(1,1000), dim=st.integers(1,100), min_vol=st.floats(1e-6,1e-1))
 def test_unitboxes_replace_Z_by_cube_inplace(num_models, num_boxes, dim, min_vol):
-    unitboxes = UnitBoxes(num_models, num_boxes, dim)
+    unitboxes = Boxes(num_models, num_boxes, dim)
     small_boxes = detect_small_boxes(unitboxes.boxes, clamp_volume, min_vol)
     replace_Z_by_cube_(unitboxes.boxes, small_boxes, min_vol)
     assert (detect_small_boxes(unitboxes.boxes, clamp_volume, min_vol - 1e-6) == 0).all()

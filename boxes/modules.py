@@ -3,11 +3,13 @@ from torch import Tensor
 from torch.nn import Module, Parameter
 import torch.nn.functional as F
 from .box_operations import *
+from .utils import *
 
 
 ################################################
 # Box Parametrization Layers
 ################################################
+default_init_min_vol = torch.finfo(torch.float32).tiny
 
 class BoxParam(Module):
     """
@@ -19,7 +21,7 @@ class BoxParam(Module):
     max coordinate as `Z`.
     """
 
-    def __init__(self, num_models:int, num_boxes:int, dim:int, **kwargs):
+    def __init__(self, num_models:int, num_boxes:int, dim:int, init_min_vol:float = default_init_min_vol, **kwargs):
         """
         Creates the Parameters used for the representation of boxes.
 
@@ -44,7 +46,7 @@ class BoxParam(Module):
         raise NotImplemented
 
 
-class UnitBoxes(Module):
+class Boxes(Module):
     """
     Parametrize boxes using the min coordinate and max coordinate,
     initialized to be in the unit hypercube.
@@ -56,37 +58,29 @@ class UnitBoxes(Module):
     taken to preserve max > min while training. (See MinBoxSize Callback.)
     """
 
-    def __init__(self, num_models: int, num_boxes: int, dim: int, init_min_vol: float = 1e-2, **kwargs):
+    def __init__(self, num_models: int, num_boxes: int, dims: int, init_min_vol: float = default_init_min_vol, **kwargs):
         """
         Creates the Parameters used for the representation of boxes.
+        Initializes boxes with a uniformly random distribution of coordinates, ensuring that each box
+        contains a cube of volume larger than init_min_vol.
 
         :param num_models: Number of models
         :param num_boxes: Number of boxes
-        :param dim: Dimension
-        :param init_min_vol: Creates boxes which a cube of this volume.
+        :param dims: Dimension
+        :param init_min_vol: Minimum volume for boxes which are created
         :param kwargs: Unused for now, but include this for future possible parameters.
         """
         super().__init__()
-        rand_param = lambda min, max: min + torch.rand(num_models, num_boxes, dim) * max
+        rand_param = lambda min, max: min + torch.rand(num_models, num_boxes, dims) * (max - min)
         if init_min_vol == 0:
-            """
-            Uniformly random distribution of coordinates, ensuring
-                Z_j > z_j for all j.
-            """
-            z = rand_param(0, 1)
-            Z = rand_param(z, 1-z)
+            per_dim_min = 0
         elif init_min_vol > 0:
-            """
-            Uniformly random distribution of coordinates, ensuring that each box
-            contains a cube of volume larger than init_min_vol.
-            Useful in higher dimensions to deal with underflow, however in high
-            dimensions a cube with small volume still has very large side-lengths.
-            """
-            eps = init_min_vol ** (1 / dim)
-            z = rand_param(0, 1-eps)
-            Z = rand_param(z+eps, 1-(z+eps))
+            per_dim_min = torch.tensor(init_min_vol).pow(1/dims)
         else:
             raise ValueError(f"init_min_vol={init_min_vol} is an invalid option.")
+
+        z = rand_param(0, 1-per_dim_min)
+        Z = rand_param(z+per_dim_min, 1)
 
         self.boxes = Parameter(torch.stack((z, Z), dim=2))
 
@@ -101,7 +95,7 @@ class UnitBoxes(Module):
         return self.boxes[:, box_indices]
 
 
-class MinMaxUnitBoxes(Module):
+class MinMaxBoxes(Module):
     """
     Parametrize boxes in \RR^d by using 2d coordinates.
 
@@ -116,7 +110,7 @@ class MinMaxUnitBoxes(Module):
     This avoids the need to make sure the boxes don't "flip", i.e. Z becomes smaller than z.
     """
 
-    def __init__(self, num_models: int, num_boxes: int, dim: int, init_min_vol: float = 1e-2, **kwargs):
+    def __init__(self, num_models: int, num_boxes: int, dim: int, init_min_vol: float = default_init_min_vol, **kwargs):
         """
         Creates the Parameters used for the representation of boxes.
 
@@ -127,28 +121,9 @@ class MinMaxUnitBoxes(Module):
         :param kwargs: Unused for now, but include this for future possible parameters.
         """
         super().__init__()
-        rand_param = lambda min, max: min + torch.rand(num_models, num_boxes, dim) * max
-        if init_min_vol == 0:
-            """
-            Uniformly random distribution of coordinates, ensuring
-                Z_j > z_j for all j.
-            """
-            z = rand_param(0, 1)
-            Z = rand_param(z, 1-z)
-        elif init_min_vol > 0:
-            """
-            Uniformly random distribution of coordinates, ensuring that each box
-            contains a cube of volume larger than init_min_vol.
-            Useful in higher dimensions to deal with underflow, however in high
-            dimensions a cube with small volume still has very large side-lengths.
-            """
-            eps = init_min_vol ** (1 / dim)
-            z = rand_param(0, 1-eps)
-            Z = rand_param(z+eps, 1-(z+eps))
-        else:
-            raise ValueError(f"init_min_vol={init_min_vol} is an invalid option.")
-
-        self.boxes = Parameter(torch.stack((z, Z), dim=2))
+        unit_boxes = Boxes(num_models, num_boxes, dim, init_min_vol)
+        self.boxes = Parameter(unit_boxes.boxes.detach().clone())
+        del unit_boxes
 
     def forward(self, box_indices = slice(None, None, None), **kwargs) -> Tensor:
         """
@@ -173,11 +148,18 @@ class DeltaBoxes(Module):
     This forces boxes to always have positive side-lengths.
     """
 
-    def __init__(self, num_models: int, num_boxes: int, dim: int, **kwargs):
+    def __init__(self, num_models: int, num_boxes: int, dim: int, init_min_vol: float = default_init_min_vol, **kwargs):
         super().__init__()
-        self.z = Parameter(torch.rand(num_models, num_boxes, dim))
-        self.logdelta = Parameter(torch.rand(num_models, num_boxes, dim))
+        unit_boxes = Boxes(num_models, num_boxes, dim, init_min_vol)
+        self._from_UnitBoxes(unit_boxes)
+        del unit_boxes
 
+    def _from_UnitBoxes(self, unit_boxes:Boxes):
+        boxes = unit_boxes.boxes.detach().clone()
+        z = boxes[:,:,0]
+        Z = boxes[:,:,1]
+        self.z = Parameter(z)
+        self.logdelta = Parameter(torch.log(Z-z))
 
     def forward(self, box_indices = slice(None, None, None), **kwargs) -> Tensor:
         """
@@ -194,28 +176,29 @@ class SigmoidBoxes(Module):
     """
     Parametrize boxes using sigmoid to make them always valid and contained within the unit cube.
 
-    self.w[model, box, dim] \in \RR
-    self.W[model, box, dim] \in \RR
+    self.w[model, box, dim] in Reals
+    self.W[model, box, dim] in Reals
 
     z = sigmoid(w)
     Z = z + sigmoid(W) * (1-z)
 
-    This forces z \in (0,1), Z \in (z, 1).
-
-    NOT IMPLEMENTED YET:
-    Optionally, indicate an eps value, such that side lengths can get no smaller than eps.
-    In this case, we would have
-
-    z = sigmoid(w)
-    Z = (z + eps) + sigmoid(W)*(1-(z+eps))
-
-    and the minimum volume of a box would be eps^d.
+    This forces z in (0,1), Z in (z, 1).
     """
 
-    def __init__(self, num_models: int, num_boxes: int, dim: int, **kwargs):
+    def __init__(self, num_models: int, num_boxes: int, dim: int, init_min_vol: float = default_init_min_vol,  **kwargs):
         super().__init__()
-        self.w = Parameter(torch.rand(num_models, num_boxes, dim))
-        self.W = Parameter(torch.rand(num_models, num_boxes, dim))
+        unit_boxes = Boxes(num_models, num_boxes, dim, init_min_vol)
+        self._from_UnitBoxes(unit_boxes)
+        del unit_boxes
+
+
+    def _from_UnitBoxes(self, unit_boxes:Boxes):
+        boxes = unit_boxes().detach().clone()
+        z = boxes[:,:,0]
+        Z = boxes[:,:,1]
+        l = (Z-z) / (1-z)
+        self.w = Parameter(torch.log(z / (1-z)))
+        self.W = Parameter(torch.log(l / (1-l)))
 
 
     def forward(self, box_indices = slice(None, None, None), **kwargs) -> Tensor:
@@ -228,6 +211,49 @@ class SigmoidBoxes(Module):
         """
         z = torch.sigmoid(self.w[:, box_indices])
         Z = z + torch.sigmoid(self.W[:, box_indices]) * (1-z)
+        return torch.stack((z,Z), dim=2)
+
+
+class MinMaxSigmoidBoxes(Module):
+    """
+    Parametrize boxes using sigmoid to make them always valid and contained within the unit cube.
+
+    self.boxes[model, box, 2, dim] in Reals
+
+
+    In this parametrization, we first convert to the unit cube:
+
+    unit_cube_boxes = torch.sigmoid(self.boxes)  # shape: (model, box, 2, dim)
+
+    We now select the z/Z coordinates by taking the min/max over axis 2, i.e.
+
+    z, _ = torch.min(unit_cube_boxes, dim=2)
+    Z, _ = torch.max(unit_cube_boxes, dim=2)
+    """
+
+    def __init__(self, num_models: int, num_boxes: int, dim: int, init_min_vol: float = default_init_min_vol,  **kwargs):
+        super().__init__()
+        unit_boxes = Boxes(num_models, num_boxes, dim, init_min_vol)
+        self._from_UnitBoxes(unit_boxes)
+        del unit_boxes
+
+
+    def _from_UnitBoxes(self, unit_boxes:Boxes):
+        boxes = unit_boxes().detach().clone()
+        self.boxes = Parameter(torch.log(boxes / (1-boxes)))
+
+
+    def forward(self, box_indices = slice(None, None, None), **kwargs) -> Tensor:
+        """
+        Returns a Tensor representing the box embeddings specified by box_indices.
+
+        :param box_indices: A NamedTensor of the box indices
+        :param kwargs: Unused for now, but include this for future possible parameters.
+        :return: Tensor of shape (model, id, zZ, dim).
+        """
+        unit_cube_boxes = torch.sigmoid(self.boxes)
+        z, _ = torch.min(unit_cube_boxes, dim=2)
+        Z, _ = torch.max(unit_cube_boxes, dim=2)
         return torch.stack((z,Z), dim=2)
 
 
@@ -245,16 +271,16 @@ class WeightedSum(Module):
 
 
 class BoxModel(Module):
-    def __init__(self, num_models:int, num_boxes:int, dim:int,
-                 BoxEmbeddingParam: type, vol_func: Callable,
-                 universe_box: Callable = None):
+    def __init__(self, BoxParamType: type, vol_func: Callable,
+                 num_models:int, num_boxes:int, dims:int,
+                 init_min_vol: float = default_init_min_vol, universe_box: Optional[Callable] = None):
         super().__init__()
-        self.box_embedding = BoxEmbeddingParam(num_models, num_boxes, dim)
+        self.box_embedding = BoxParamType(num_models, num_boxes, dims, init_min_vol)
         self.vol_func = vol_func
 
         if universe_box is None:
-            z = torch.zeros(dim)
-            Z = torch.ones(dim)
+            z = torch.zeros(dims)
+            Z = torch.ones(dims)
             self.universe_box = lambda _: torch.stack((z,Z))[None, None]
             self.universe_vol = lambda _: self.vol_func(self.universe_box(None)).squeeze()
             self.clamp = True
@@ -278,7 +304,7 @@ class BoxModel(Module):
         # Conditional
         A = box_embeddings[:, box_indices[:,0]]
         B = box_embeddings[:, box_indices[:,1]]
-        P_B_given_A = self.vol_func(intersection(A, B)) / (unary_probs[:, box_indices[:,0]] + 1e-38)
+        P_B_given_A = self.vol_func(intersection(A, B)) / unary_probs[:, box_indices[:,0]] # + 1e-38)
 
         # Scale Unary
         unary_probs = unary_probs / self.universe_vol(box_embeddings)
