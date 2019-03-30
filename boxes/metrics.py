@@ -4,7 +4,7 @@ from .box_operations import *
 import scipy.stats as spstats # For Spearman r
 
 
-def pearson_r(p: Tensor, q: Tensor) -> Tensor:
+def pearson_r(p: Tensor, q: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
     """Pearson r statistic
     Implementation is translated from scipy.stats.pearsonr
     """
@@ -13,7 +13,7 @@ def pearson_r(p: Tensor, q: Tensor) -> Tensor:
     pm, qm = p-mp, q-mq
     r_num = torch.sum(pm * qm)
     r_den = torch.sqrt(torch.sum(pm**2) * torch.sum(qm**2))
-    r = r_num / r_den
+    r = r_num / (r_den + 1e-38)
 
     # Presumably, if abs(r) > 1, then it is only some small artifact of floating
     # point arithmetic.

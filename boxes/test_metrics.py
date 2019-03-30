@@ -13,7 +13,7 @@ same_len_arrays = st.integers(min_value=1, max_value=100).flatmap(
 
 
 @given(same_len_arrays)
-def test_pearson_r(arrays):
+def test_pearson_r_same_as_scipy(arrays):
     p, q = arrays
     # Due to floating point errors, if the array is filled with a single value torch will sometimes return a value while
     # SciPy will not.
