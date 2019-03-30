@@ -8,7 +8,10 @@ from .box_operations import *
 import math
 
 
-def func_list_to_dict(*func_list) -> Dict[str, Callable]:
+ModelOutput = Dict[str, Tensor]
+FuncInput = Union[OrderedDict, dict, Collection[Union[Callable, Tuple[float, Callable]]]]
+
+def func_list_to_dict(*func_list: FuncInput) -> Dict[str, Callable]:
     """
 
     :param func_list: List of functions or tuples (weight, function)
@@ -27,7 +30,7 @@ def func_list_to_dict(*func_list) -> Dict[str, Callable]:
             func_dict[f.__name__] = f
     return func_dict
 
-def unweighted_func_dict(*func_list) -> Dict[str, Callable]:
+def unweighted_func_dict(*func_list: FuncInput) -> Dict[str, Callable]:
     if type(func_list) == OrderedDict or type(func_list) == dict:
         return func_list
     func_dict = OrderedDict()
@@ -37,9 +40,10 @@ def unweighted_func_dict(*func_list) -> Dict[str, Callable]:
         func_dict[f.__name__] = f
     return func_dict
 
+
 class LossPieces:
 
-    def __init__(self, *loss_funcs):
+    def __init__(self, *loss_funcs: FuncInput):
         """
 
         :param functions: List of functions or tuples (weight, function)
@@ -48,10 +52,10 @@ class LossPieces:
         self.unweighted_funcs = unweighted_func_dict(*loss_funcs)
         self.loss_funcs = func_list_to_dict(*loss_funcs)
 
-    def loss_func(self, model_out: Tensor, true_out: Tensor, learner: Learner = None, recorder: Recorder = None, weighted = True) -> Tensor:
+    def loss_func(self, model_out: ModelOutput, true_out: Tensor,
+            learner: Optional[Learner] = None, recorder: Optional[Recorder] = None, weighted: bool = True) -> Tensor:
         """
         Weighted sum of all loss functions. Tracks values in Recorder.
-
         """
         if weighted:
             loss_funcs = self.loss_funcs
@@ -62,7 +66,6 @@ class LossPieces:
             torch.set_grad_enabled(False)
         try:
             loss_pieces = {k: l(model_out, true_out) for k, l in loss_funcs.items()}
-            # Note: don't want to detach / move / unwrap tensors here because we have to sum the loss first:
             loss = sum(loss_pieces.values())
             loss_pieces['loss'] = loss
             if learner is not None:
@@ -75,29 +78,30 @@ class LossPieces:
         return loss
 
 
-def mean_unit_cube_loss(model_out, _):
+def mean_unit_cube_loss(model_out: ModelOutput, _) -> Tensor:
     return ((model_out["box_embeddings"] - 1).clamp(0) + (-model_out["box_embeddings"]).clamp(0)).sum(dim=[-2, -1]).mean()
 
 
-def mean_unary_kl_loss(unary, eps=1e-38):
-    def mean_unary_kl_loss(model_out, _):
+def mean_unary_kl_loss(unary: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Callable:
+    """ Factory Function to create the actual mean_unary_kl_loss function with the given set of unary probabilities. """
+    def mean_unary_kl_loss(model_out: ModelOutput, _) -> Tensor:
         return kl_div_sym(model_out["unary_probs"], unary, eps).mean()
     return mean_unary_kl_loss
 
 
-def mean_cond_kl_loss(model_out, target, eps=1e-38):
+def mean_cond_kl_loss(model_out: ModelOutput, target: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
     return kl_div_sym(model_out["P(B|A)"], target, eps).mean()
 
 
-def kl_div_sym(p, q, eps=1e-38):
-    return kl_div_term(p,q, eps) + kl_div_term(1-p, 1-q, eps)
+def kl_div_sym(p: Tensor, q: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
+    return kl_div_term(p, q, eps) + kl_div_term(1-p, 1-q, eps)
 
 
-def kl_div_term(p, q, eps=1e-38):
+def kl_div_term(p: Tensor, q: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
     return F.kl_div(torch.log(p.clamp_min(eps)), q.clamp_min(eps), reduction="none")
 
 
-def mean_pull_loss(model_out, target, eps=1e-6):
+def mean_pull_loss(model_out: ModelOutput, target: Tensor, eps: float = 1e-6) -> Tensor:
     """
     Pulls together boxes which are disjoint but should overlap.
     """
@@ -111,7 +115,7 @@ def mean_pull_loss(model_out, target, eps=1e-6):
         return penalty[_needing_pull_mask].sum() / num_needing_pull_mask
 
 
-def mean_push_loss(model_out, target, eps=1e-6):
+def mean_push_loss(model_out: ModelOutput, target: Tensor, eps: float = 1e-6) -> Tensor:
     A, B = model_out["A"], model_out["B"]
     _needing_push_mask = needing_push_mask(A, B, target)
     num_needing_push_mask = _needing_push_mask.sum()
