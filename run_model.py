@@ -1,40 +1,25 @@
 #!/bin/env python
 from boxes import *
-import math
+from boxes import sql_logging
+from boxes.objective import *
 import argparse
 import os
 from skopt.space import Real, Integer
 from skopt.utils import use_named_args
 from skopt import dummy_minimize, gp_minimize, forest_minimize, gbrt_minimize
 import sqlite3
+import copy
+from pprint import pprint
 
+# np.seterr(all='raise')
 
-@dataclass
-class RecorderCollection:
-    learn:Recorder = field(default_factory=Recorder)
-    train:Recorder = field(default_factory=Recorder)
-    dev:Recorder = field(default_factory=Recorder)
-
-def save_record_to_sql(conn, rec: Recorder, table_name: str, training_instance_id: int):
-    cols = [f"[{col}] REAL" for col in rec._data.columns]
-    cols += ["[epochs] REAL"]
-    cols += ["[training_instance_id] INT"]
-    rec._data["training_instance_id"] = training_instance_id
-
-    c = conn.cursor()
-    c.execute(f"create table if not exists {table_name} ({','.join(cols)})")
-    for col in cols:
-        try:
-            c.execute(f"alter table {table_name} add column {col}")
-        except:
-            pass
-    rec._data.to_sql(table_name, conn, if_exists="append", index_label="epochs")
-    conn.commit()
-
+##########################################
+# Hyperparameter Sampling
+##########################################
 learning_params = (
     Integer(5, 50, name="dims"),
-    Integer(20, 200, name="num_batches"),
-    Real(1e-5, 1e-1, "log-uniform", name="learning_rate"),
+    Integer(20, 50, name="num_batches"),
+    Real(1e-4, 1e-0, "log-uniform", name="learning_rate"),
 )
 
 loss_weights = (
@@ -45,179 +30,183 @@ loss_weights = (
     Real(1e-1, 1e4, "log-uniform", name="mean_surrogate_loss"),
 )
 
+
+#######################################
+# Default Settings
+#######################################
 defaults = {
     "BoxParamType": None,
-    "extra_callbacks": (),
+    "extra_callbacks": [],
     "gradient_clipping": (-1,1),
     "universe_box": None,
     "unit_cube_loss_func": (mean_unit_cube_loss,),
     "projected_gradient_descent": False,
     "vol_func": clamp_volume,
-    "plateau_loss_funcs": (),
+    "plateau_loss_funcs": [],
 }
 
 # Box Parametrizations
 box_param_options = {
-    "UnitBoxes": {"BoxParamType": UnitBoxes, "extra_callbacks": (MinBoxSize())},
-    "MinMaxUnitBoxes": {"BoxParamType": MinMaxUnitBoxes},
-    "DeltaBoxes": {"BoxParamType": DeltaBoxes},
-    "SigmoidBoxes": {"BoxParamType": SigmoidBoxes},
+    "Boxes": {"BoxParamType": Boxes, "extra_callbacks": [MinBoxSize()]},
+    "MinMaxBoxes": {"BoxParamType": MinMaxBoxes},
+    "DeltaBoxes": {"BoxParamType": DeltaBoxes, "gradient_clipping": (-1000, 1000)},
+    "SigmoidBoxes": {"BoxParamType": SigmoidBoxes, "gradient_clipping": (-1000, 1000)},
+    "MinMaxSigmoidBoxes": {"BoxParamType": MinMaxSigmoidBoxes, "gradient_clipping": (-1000, 1000)},
 }
 
 # Universe
 universe_options = {
-    "scaled": {"universe_box": smallest_containing_box, "unit_cube_loss_func": (), "gradient_clipping": (-100, 100)},
-    "scaled_penalty": {"universe_box": smallest_containing_box},
+    "scaled": {"universe_box": smallest_containing_box, "unit_cube_loss_func": (), "gradient_clipping": (-1000, 1000)},
+    # Note: the gradient clipping here ^^^ will overwrite any gradient clipping from above.
+    # This is OK because:
+    #   - DeltaBoxes' gradient_clipping is the same as this (currently)
+    #   - It doesn't really make sense to use SigmoidBoxes with a scaled universe
+    "scaled_penalty": {"universe_box": smallest_containing_box_outside_unit_cube},
     "hard_penalty": {},
     # "hard_projected": {"projected_gradient_descent": True},
+    "hard": {"unit_cube_loss_func": ()},
 }
-# TODO: Anything other than "scaled" should probably also initialize parameters in the unit cube.
-# This probably isn't too much of an issue, however, as unit cube penalties will quickly make the boxes move to the unit cube.
 
-# Pull Methods
+# Methods for fixing plateaus in the loss landscape
 plateau_options = {
     "softbox": {"vol_func": soft_volume},
-    "constraint": {"plateau_loss_funcs": (mean_pull_loss, mean_push_loss)},
+    "constraint": {"plateau_loss_funcs": [mean_pull_loss, mean_push_loss]},
     # "hardbox": {"plateau_loss_funcs": (mean_surrogate_loss)},
     "none": {},
 }
 
-# Hyperparameter Optimization
-hyperparameter_optimization = {
+# Hyperparameter Optimization Methods
+hyperparameter_optimization_methods = {
     "random": dummy_minimize,
     "forest": forest_minimize,
     "gp": gp_minimize,
     "gbrt": gbrt_minimize,
 }
 
+########################################
+# Parser
+########################################
 parser = argparse.ArgumentParser()
 parser.add_argument("--box_param", choices=box_param_options, help="Type of box parametrization", required=True)
 parser.add_argument("--universe", choices=universe_options, help="Volume function", required=True)
 parser.add_argument("--plateau", choices=plateau_options, help="Method for pulling boxes together", required=True)
 parser.add_argument("--path", help="Folder with serialized training data", required=True)
-parser.add_argument("--hyperopt_method", choices=hyperparameter_optimization, help="Optimization method to choose hyperparameters", default="gp")
+parser.add_argument("--hyper_opt_method", choices=hyperparameter_optimization_methods, help="Optimization method to choose hyperparameters", default="gp")
 parser.add_argument("--epochs", help="Number of epochs to train", type=int, default=10)
 parser.add_argument("--hyper_calls", help="Number of times to call the hyperparameter optimizer", type=int, default=100)
-
-sql_columns = [
-    "[auto_id] INTEGER PRIMARY KEY",
-    "[box_param] text",
-    "[universe] text",
-    "[plateau] text",
-    "[hyperopt_method] text",
-    "[epochs] integer",
-    "[hyper_calls] integer",
-    "[random_seed] integer",
-    "[dims] integer",
-    "[num_batches] integer",
-    "[learning_rate] real"
-    ]
-
-sql_columns += [f"[{z.name}] real" for z in loss_weights]
-
+parser.add_argument("--init_min_vol", help="Minimum volumes for boxes at initialization", type=float, default=torch.finfo(torch.float32).tiny)
+parser.add_argument("--device", help="Specify the device to train on (eg. cpu, cuda)", type=str, default="cuda")
 args = parser.parse_args()
-
 os.chdir(args.path)
 
-unary_prob = torch.from_numpy(np.loadtxt("train_tc_unary.tsv")).float().to("cuda")
-# Data in the rest of these tsvs should be in the form
-# A    B    P(B | A)
-# where A and B are the line indices from the unary.tsv file.
-train = Probs.load_from_julia("", 'train_tc_pos.tsv', 'train_neg.tsv', ratio_neg = 1).to("cuda")
-dev = Probs.load_from_julia("", 'dev_pos.tsv', 'dev_neg.tsv', ratio_neg = 1).to("cuda")
-# test = PairwiseProbs.load_from_julia(PATH, 'test_pos.tsv', 'test_neg.tsv', ratio_neg = 1, device=default_device)
 
-model = pd.DataFrame()
+##########################################
+# Update Settings
+##########################################
+settings = copy.deepcopy(defaults)
+settings.update(box_param_options[args.box_param])
+settings.update(universe_options[args.universe])
+settings.update(plateau_options[args.plateau])
+settings["epochs"] = args.epochs
+settings["init_min_vol"] = args.init_min_vol
+settings["device"] = args.device
 
-
-defaults.update(box_param_options[args.box_param])
-defaults.update(universe_options[args.universe])
-defaults.update(plateau_options[args.plateau])
-
-
-num_boxes = unary_prob.shape[0]
-BoxParamType = defaults["BoxParamType"]
-vol_func = defaults["vol_func"]
-
-loss_funcs = [mean_cond_kl_loss, mean_unary_kl_loss(unary_prob), *defaults["unit_cube_loss_func"], *defaults["plateau_loss_funcs"]]
-loss_func_names = [f.__name__ for f in loss_funcs]
-loss_weights = [z for z in loss_weights if z.name in loss_func_names]
-
-parameter_space = (*learning_params, *loss_weights)
-
+# Pick random seed for eventual hyperparameter training
+# (This is passed to the skopt function)
 random_seed = np.random.randint(2**32 - 1)
-torch.manual_seed(random_seed)
-np.random.seed(random_seed)
 
-args_to_save = vars(args)
-args_to_save.pop("path", None)
+###################################################
+# SETUP SQL
+###################################################
+sql_hyperparameter_optimization_instance_columns = [
+    "[id] INTEGER PRIMARY KEY",
+    "[box_param] TEXT",
+    "[universe] TEXT",
+    "[plateau] TEXT",
+    "[init_min_vol] REAL",
+    "[hyper_opt_method] TEXT",
+    "[epochs] INTEGER",
+    "[hyper_calls] INTEGER",
+    "[gradient_clip_min] REAL",
+    "[gradient_clip_max] REAL",
+    "[device] TEXT",
+    "[random_seed] INTEGER",
+    ]
+
+sql_training_instance_columns = [
+    "[id] INTEGER PRIMARY KEY",
+    "[hyper_opt_id] INTEGER NOT NULL",
+    "[hyper_opt_iteration] INTEGER",
+    "[dims] INTEGER",
+    "[num_batches] INTEGER",
+    "[learning_rate] REAL",
+    "[torch_random_seed] INTEGER",
+    ]
+sql_training_instance_columns += [f"[{z.name}] REAL" for z in loss_weights]
+# Note: FOREIGN KEY definitions have to occur after the rest of the columns.
+sql_training_instance_columns += ["FOREIGN KEY(hyper_opt_id) REFERENCES Hyperparameter_Optimization_Instance(id)"]
+#####################################################
+# Write SQL for Hyperparameter Optimization Instance
+#####################################################
+hyperparam_optimization_instance_values = {
+    **vars(args),
+    "gradient_clip_min": settings["gradient_clipping"][0],
+    "gradient_clip_max": settings["gradient_clipping"][1],
+    "random_seed": random_seed
+}
+hyperparam_optimization_instance_values.pop("path", None)
 
 sql_conn = sqlite3.connect("train.db")
+sql_logging.create_or_update_table_and_cols_(sql_conn, "Hyperparameter_Optimization_Instances", sql_hyperparameter_optimization_instance_columns)
+hyper_opt_id = sql_logging.write_dict_(sql_conn, "Hyperparameter_Optimization_Instances", hyperparam_optimization_instance_values)
+sql_logging.create_or_update_table_and_cols_(sql_conn, "Training_Instances", sql_training_instance_columns)
+##############################
+# Load Data
+##############################
+unary_probs = torch.from_numpy(np.loadtxt("train_tc_unary.tsv")).float().to(args.device)
+train = Probs.load_from_julia("", 'train_tc_pos.tsv', 'train_neg.tsv', ratio_neg = 1).to(args.device)
+dev = Probs.load_from_julia("", 'dev_pos.tsv', 'dev_neg.tsv', ratio_neg = 1).to(args.device)
+# test = PairwiseProbs.load_from_julia(PATH, 'test_pos.tsv', 'test_neg.tsv', ratio_neg = 1).to(args.device)
+
+#############################
+# Prepare Objective Function
+#############################
+loss_funcs = [
+    mean_cond_kl_loss,
+    mean_unary_kl_loss(unary_probs),
+    *settings.pop("unit_cube_loss_func", []),
+    *settings.pop("plateau_loss_funcs", []),
+]
+
+# Reduce our parameter space, depending on the arguments chosen.
+loss_func_names = [f.__name__ for f in loss_funcs]
+loss_weights = [z for z in loss_weights if z.name in loss_func_names]
+parameter_space = (*learning_params, *loss_weights)
+
+
+o = Objective(
+    loss_funcs = loss_funcs,
+    unary_probs = unary_probs,
+    train = train,
+    dev = dev,
+    obj_func_to_min = obj_mean_cond_kl_min,
+    hyper_opt_id = hyper_opt_id,
+    sql_conn = sql_conn,
+    **settings
+)
 
 @use_named_args(parameter_space)
 def objective(**hyperparameters):
-    print(hyperparameters)
+    return o.objective(**hyperparameters)
 
-
-    hyperparam_to_save = {**hyperparameters, **args_to_save, "random_seed": random_seed}
-    for k, v in hyperparam_to_save.items():
-        if hasattr(v, 'dtype'):
-            hyperparam_to_save[k] = v.item()
-
-    c = sql_conn.cursor()
-    c.execute(f"insert into Training_Instances ({','.join(hyperparam_to_save.keys())}) values ({':' +', :'.join(hyperparam_to_save.keys())})", hyperparam_to_save)
-    sql_conn.commit()
-    training_instance_id = c.lastrowid # this is guaranteed to be the ID we want,
-
-    b = BoxModel(1, num_boxes, hyperparameters["dims"], BoxParamType, vol_func)
-    b.to("cuda")
-
-    train_dl = DataLoader(train, batch_size=math.ceil(train.ids.shape[0]/hyperparameters["num_batches"]), shuffle=True)
-    opt = torch.optim.Adam(b.parameters(), lr=hyperparameters["learning_rate"]) #, betas=(0.9, 0.99))
-
-    weighted_loss_funcs = []
-    for loss_func in loss_funcs:
-        if loss_func.__name__ in hyperparameters:
-            weighted_loss_funcs.append((hyperparameters[loss_func.__name__], loss_func))
-        else:
-            weighted_loss_funcs.append(loss_func)
-
-    loss_func = LossPieces(*weighted_loss_funcs)
-
-    metrics = [metric_num_needing_push, metric_num_needing_pull, metric_hard_accuracy]
-
-    rec_col = RecorderCollection()
-
-    callbacks = CallbackCollection(
-        LossCallback(rec_col.train, train, weighted=False),
-        LossCallback(rec_col.dev, dev, weighted=False),
-        *(MetricCallback(rec_col.dev, dev, m) for m in metrics),
-        *(MetricCallback(rec_col.train, train, m) for m in metrics),
-        MetricCallback(rec_col.dev, dev, metric_pearson_r),
-        MetricCallback(rec_col.dev, dev, metric_spearman_r),
-        GradientClipping(*defaults["gradient_clipping"]),
-        StopAtMaxLoss(10),
-        *defaults["extra_callbacks"]
-    )
-
-    l = Learner(train_dl, b, loss_func.loss_func, opt, callbacks, recorder = rec_col.learn)
-    l.train(args.epochs)
-    try:
-        mean_cond_kl_loss_vals = rec_col.dev["mean_cond_kl_loss"]
-        mean_cond_kl_min = np.min(mean_cond_kl_loss_vals[~np.isnan(mean_cond_kl_loss_vals)])
-    except KeyError:
-        mean_cond_kl_min = 100
-    print(f"Mean KL Min: {mean_cond_kl_min}\n\n")
-
-    save_record_to_sql(sql_conn, rec_col.train, "Train", training_instance_id)
-    save_record_to_sql(sql_conn, rec_col.dev, "Dev", training_instance_id)
-
-    return mean_cond_kl_min
-
-c = sql_conn.cursor()
-c.execute(f"create table if not exists Training_Instances ({','.join(sql_columns)})")
-res_gp = hyperparameter_optimization[args.hyperopt_method](objective, parameter_space, n_calls=args.hyper_calls, random_state=random_seed)
-
-print(res_gp.fun)
-print(res_gp.specs)
-print(res_gp.x)
+##############################
+# Hyperparameter Optimize!
+##############################
+try:
+    res_gp = hyperparameter_optimization_methods[args.hyper_opt_method](
+        objective, parameter_space, n_calls=args.hyper_calls, random_state=random_seed)
+    pprint(res_gp.fun)
+    pprint(res_gp.specs)
+    pprint(res_gp.x)
+except KeyboardInterrupt:
+    print("Stopped hyperparamter optimzation due to keyboard interrupt.\nThe in-progress run was not saved to the database.")
