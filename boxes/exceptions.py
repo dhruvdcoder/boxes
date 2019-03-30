@@ -17,3 +17,12 @@ class MaxLoss(StopTrainingError):
     def __str__(self):
         return f"Max Loss Exceeded: {self.loss} > {self.max_loss}"
 
+
+@dataclass
+class EarlyStopping(StopTrainingError):
+    """Max Value Exceeded"""
+    condition: str
+
+    def __str__(self):
+        return f"EarlyStopping: {self.condition}"
+

@@ -31,6 +31,9 @@ class Recorder:
         self._data[name] = [] # adds this column to DataFrame
         return name
 
+    def dataframe(self):
+        return self._data
+
     def __getitem__(self, item):
         return self._data.__getitem__(item)
 
@@ -43,6 +46,11 @@ class Recorder:
     def __repr__(self):
         return self._data.__repr__()
 
+@dataclass
+class RecorderCollection:
+    learn:Recorder = field(default_factory=Recorder)
+    train:Recorder = field(default_factory=Recorder)
+    dev:Recorder = field(default_factory=Recorder)
 
 @dataclass
 class Progress:
@@ -97,3 +105,4 @@ class Learner:
             print(e)
         except KeyboardInterrupt:
             print(f"Stopped training at {self.progress.partial_epoch_progress()} epochs due to keyboard interrupt.")
+            raise KeyboardInterrupt

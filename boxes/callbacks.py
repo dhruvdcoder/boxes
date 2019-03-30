@@ -5,6 +5,7 @@ import torch
 from torch.utils.data import Dataset
 from .box_operations import *
 from .exceptions import *
+import numpy as np
 import ipywidgets as widgets
 from IPython.core.display import HTML, display
 if TYPE_CHECKING:
@@ -155,6 +156,43 @@ class StopAtMaxLoss(Callback):
     def batch_end(self, learner: Learner):
         if learner.loss > self.max_loss:
             raise MaxLoss(learner.loss, self.max_loss)
+
+
+@dataclass
+class PercentIncreaseEarlyStopping(Callback):
+    rec: Recorder
+    metric_name: str
+    percent_inc: float
+    epoch_count: int = 0
+    flag: Optional[str] = None
+
+    def __post_init__(self):
+        if self.epoch_count == 0:
+            self.epoch_end = self._epoch_end_percent_only
+        else:
+            self.epoch_end = self._epoch_end_both
+
+    @torch.no_grad()
+    def _epoch_end_percent_only(self, learner: Learner):
+        vals = self.rec[self.metric_name]
+        min_val = vals.min()
+        cur_val = vals.tail(1).item()
+        if  cur_val > (1 + self.percent_inc) * min_val:
+            if self.flag is not None:
+                self.rec.update_({self.flag: True}, vals.tail(1).index.item())
+            else:
+                raise EarlyStopping(f"{self.metric_name} is now {cur_val}, which is more than {1 + self.percent_inc} times it's minimum of {min_val}.")
+
+    @torch.no_grad()
+    def _epoch_end_both(self, learner: Learner):
+        vals = self.rec[self.metric_name]
+        min_idx = vals.idxmin()
+        cur_idx = vals.tail(1).index.item()
+        if cur_idx >= min_idx + self.epoch_count and vals[cur_idx] > (1 + self.percent_inc) * vals[min_idx]:
+            if self.flag is not None:
+                self.rec.update_({self.flag: True}, cur_idx)
+            else:
+                raise EarlyStopping(f"{self.metric_name} is now {vals[cur_idx]}, which is more than {1 + self.percent_inc} times it's minimum of {vals[min_idx]}, which occurred {cur_idx - min_idx} >= {self.epoch_count} epochs ago.")
 
 
 @dataclass
