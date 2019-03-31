@@ -5,7 +5,6 @@ from typing import *
 from .learner import Learner, Recorder
 from collections import OrderedDict
 from .box_operations import *
-import math
 
 
 ModelOutput = Dict[str, Tensor]
@@ -76,6 +75,9 @@ class LossPieces:
         finally:
             torch.set_grad_enabled(grad_status)
         return loss
+
+    def __call__(self, *args, **kwargs):
+        return self.loss_func(*args, **kwargs)
 
 
 def mean_unit_cube_loss(model_out: ModelOutput, _) -> Tensor:
