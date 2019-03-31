@@ -3,6 +3,7 @@ from . import sql_logging
 from pprint import pprint
 from sqlite3 import Connection
 from dataclasses import dataclass, field
+import math
 
 @dataclass
 class Objective:
