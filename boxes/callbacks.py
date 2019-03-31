@@ -6,8 +6,17 @@ from torch.utils.data import Dataset
 from .box_operations import *
 from .exceptions import *
 import numpy as np
-import ipywidgets as widgets
-from IPython.core.display import HTML, display
+
+try:
+    from IPython import get_ipython
+    if 'IPKernelApp' not in get_ipython().config:  # pragma: no cover
+        raise ImportError("console")
+except:
+    pass
+else:
+    import ipywidgets as widgets
+    from IPython.core.display import HTML, display
+
 if TYPE_CHECKING:
     from .learner import Learner, Recorder
 
