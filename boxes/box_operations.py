@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from typing import *
 
 
-def intersection(A:Tensor, B:Tensor) -> Tensor:
+def intersection(A: Tensor, B: Tensor) -> Tensor:
     """
     :param A: Tensor(model, pair, zZ, dim)
     :param B: Tensor(model, pair, zZ, dim)
@@ -12,6 +12,17 @@ def intersection(A:Tensor, B:Tensor) -> Tensor:
     """
     z = torch.max(A[:,:,0], B[:,:,0])
     Z = torch.min(A[:,:,1], B[:,:,1])
+    return torch.stack((z, Z), dim=2)
+
+
+def join(A: Tensor, B: Tensor) -> Tensor:
+    """
+    :param A: Tensor(model, pair, zZ, dim)
+    :param B: Tensor(model, pair, zZ, dim)
+    :return: Tensor(model, pair, zZ, dim), box embeddings for the smallest box which contains A and B
+    """
+    z = torch.min(A[:,:,0], B[:,:,0])
+    Z = torch.max(A[:,:,1], B[:,:,1])
     return torch.stack((z, Z), dim=2)
 
 
