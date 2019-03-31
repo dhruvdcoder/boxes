@@ -76,12 +76,13 @@ class Objective:
             *(MetricCallback(rec_col.train, self.train, m) for m in metrics),
             MetricCallback(rec_col.dev, self.dev, metric_pearson_r),
             MetricCallback(rec_col.dev, self.dev, metric_spearman_r),
-            PercentIncreaseEarlyStopping(rec_col.dev, "mean_cond_kl_loss", 0.25, 10, flag="early_stopped_0.25_10"),
-            PercentIncreaseEarlyStopping(rec_col.dev, "mean_cond_kl_loss", 0.5, flag="early_stopped_0.50"),
+            PercentIncreaseEarlyStopping(rec_col.dev, "mean_cond_kl_loss", 0.25, 10),
+            PercentIncreaseEarlyStopping(rec_col.dev, "mean_cond_kl_loss", 0.5),
+            StopIfNaN(),
             *self.extra_callbacks,
         )
 
-        l = Learner(train_dl, b, loss_func.loss_func, opt, callbacks, recorder = rec_col.learn)
+        l = Learner(train_dl, b, loss_func, opt, callbacks, recorder = rec_col.learn)
         l.train(self.epochs)
 
         obj_to_min = self.obj_func_to_min(rec_col)
