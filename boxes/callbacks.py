@@ -205,3 +205,18 @@ class ModelHistory(Callback):
 
     def __getitem__(self, item):
         return self.state_dict[item]
+
+
+class StopIfNaN(Callback):
+
+    @torch.no_grad()
+    def backward_end(self, learner: Learner):
+        for param in learner.model.parameters():
+            if torch.isnan(param.grad).any():
+                raise StopTrainingError("NaNs in gradients!")
+
+    @torch.no_grad()
+    def batch_end(self, learner: Learner):
+        for param in learner.model.parameters():
+            if torch.isnan(param).any():
+                raise StopTrainingError("NaNs in parameters!")
