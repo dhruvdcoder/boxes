@@ -1,6 +1,6 @@
+from .box_operations import *
 import torch
 from torch import Tensor
-from .box_operations import *
 import scipy.stats as spstats # For Spearman r
 
 

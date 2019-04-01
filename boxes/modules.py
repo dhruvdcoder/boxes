@@ -1,8 +1,8 @@
+from .box_operations import *
 import torch
 from torch import Tensor
 from torch.nn import Module, Parameter
 import torch.nn.functional as F
-from .box_operations import *
 
 
 ################################################

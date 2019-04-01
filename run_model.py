@@ -1,6 +1,4 @@
 #!/bin/env python
-from boxes import *
-from boxes import sql_logging
 from boxes.objective import *
 import argparse
 import os
@@ -90,7 +88,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--box_param", choices=box_param_options, help="Type of box parametrization", required=True)
 parser.add_argument("--universe", choices=universe_options, help="Volume function", required=True)
 parser.add_argument("--plateau", choices=plateau_options, help="Method for pulling boxes together", required=True)
-parser.add_argument("--path", help="Folder with serialized training data", required=True)
+parser.add_argument("--path", help="Folder with training data", required=True)
 parser.add_argument("--hyper_opt_method", choices=hyperparameter_optimization_methods, help="Optimization method to choose hyperparameters", default="gp")
 parser.add_argument("--epochs", help="Number of epochs to train", type=int, default=10)
 parser.add_argument("--hyper_calls", help="Number of times to call the hyperparameter optimizer", type=int, default=100)
