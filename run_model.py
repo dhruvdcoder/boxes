@@ -144,7 +144,7 @@ sql_training_instance_columns = [
     ]
 sql_training_instance_columns += [f"[{z.name}] REAL" for z in loss_weights]
 # Note: FOREIGN KEY definitions have to occur after the rest of the columns.
-sql_training_instance_columns += ["FOREIGN KEY(hyper_opt_id) REFERENCES Hyperparameter_Optimization_Instance(id)"]
+sql_training_instance_columns += ["FOREIGN KEY(hyper_opt_id) REFERENCES Hyperparameter_Optimization_Instances(id)"]
 #####################################################
 # Write SQL for Hyperparameter Optimization Instance
 #####################################################
