@@ -61,3 +61,13 @@ def metric_num_needing_pull(model, data_in, data_out):
 def metric_hard_accuracy(model, data_in, data_out):
     hard_pred = model(data_in)["P(B|A)"] > 0.5
     return (data_out == hard_pred.float()).float().mean()
+
+
+def metric_hard_f1(model, data_in, data_out):
+    hard_pred = model(data_in)["P(B|A)"] > 0.5
+    true_pos = data_out[hard_pred==1].sum()
+    total_pred_pos = (hard_pred==1).sum().float()
+    total_actual_pos = data_out.sum().float()
+    precision = true_pos / total_pred_pos
+    recall = true_pos / total_actual_pos
+    return 2 * (precision*recall) / (precision + recall)
