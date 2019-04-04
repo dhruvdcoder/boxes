@@ -85,7 +85,7 @@ class Objective:
         )
 
         l = Learner(train_dl, b, loss_func, opt, callbacks, recorder = rec_col.learn)
-        l.train(self.epochs)
+        l.train(self.epochs, progress_bar=False)
 
         obj_to_min = self.obj_func_to_min(rec_col)
 
