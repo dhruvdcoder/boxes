@@ -303,7 +303,7 @@ class BoxModel(Module):
         # Conditional
         A = box_embeddings[:, box_indices[:,0]]
         B = box_embeddings[:, box_indices[:,1]]
-        P_B_given_A = self.vol_func(intersection(A, B)) / (unary_probs[:, box_indices[:,0]] + torch.finfo(torch.float32).tiny)
+        P_A_given_B = self.vol_func(intersection(A, B)) / (unary_probs[:, box_indices[:,1]] + torch.finfo(torch.float32).tiny)
 
         # Scale Unary
         unary_probs = unary_probs / self.universe_vol(box_embeddings)
@@ -313,5 +313,5 @@ class BoxModel(Module):
             "box_embeddings": box_embeddings_orig,
             "A": A,
             "B": B,
-            "P(B|A)": self.weights(P_B_given_A),
+            "P(A|B)": self.weights(P_A_given_B),
         }

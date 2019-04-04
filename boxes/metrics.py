@@ -41,11 +41,11 @@ def spearman_r(p: Tensor, q: Tensor) -> float:
 
 
 def metric_pearson_r(model, data_in, data_out):
-    return pearson_r(model(data_in)["P(B|A)"], data_out)
+    return pearson_r(model(data_in)["P(A|B)"], data_out)
 
 
 def metric_spearman_r(model, data_in, data_out):
-    return spearman_r(model(data_in)["P(B|A)"], data_out)
+    return spearman_r(model(data_in)["P(A|B)"], data_out)
 
 
 def metric_num_needing_push(model, data_in, data_out):
@@ -59,12 +59,12 @@ def metric_num_needing_pull(model, data_in, data_out):
 
 
 def metric_hard_accuracy(model, data_in, data_out):
-    hard_pred = model(data_in)["P(B|A)"] > 0.5
+    hard_pred = model(data_in)["P(A|B)"] > 0.5
     return (data_out == hard_pred.float()).float().mean()
 
 
 def metric_hard_f1(model, data_in, data_out):
-    hard_pred = model(data_in)["P(B|A)"] > 0.5
+    hard_pred = model(data_in)["P(A|B)"] > 0.5
     true_pos = data_out[hard_pred==1].sum()
     total_pred_pos = (hard_pred==1).sum().float()
     total_actual_pos = data_out.sum().float()

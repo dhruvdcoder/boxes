@@ -67,7 +67,7 @@ class Objective:
 
         loss_func = LossPieces(*weighted_loss_funcs)
 
-        metrics = [metric_num_needing_push, metric_num_needing_pull, metric_hard_accuracy]
+        metrics = [metric_num_needing_push, metric_num_needing_pull, metric_hard_accuracy, metric_hard_f1]
 
         rec_col = RecorderCollection()
 

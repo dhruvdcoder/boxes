@@ -20,7 +20,7 @@ def mean_unary_kl_loss(unary: Tensor, eps: float = torch.finfo(torch.float32).ti
 
 
 def mean_cond_kl_loss(model_out: ModelOutput, target: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
-    return kl_div_sym(model_out["P(B|A)"], target, eps).mean()
+    return kl_div_sym(model_out["P(A|B)"], target, eps).mean()
 
 
 def kl_div_sym(p: Tensor, q: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
