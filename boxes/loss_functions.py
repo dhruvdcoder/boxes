@@ -52,7 +52,7 @@ def mean_push_loss(model_out: ModelOutput, target: Tensor, eps: float = 1e-6) ->
     if num_needing_push_mask == 0:
         return 0
     else:
-        penalty = torch.min((A[:,:,1] - B[:,:,1] + eps).clamp(0).min(dim=-1)[0], (A[:,:,0] - B[:,:,0] + eps).clamp(0).min(dim=-1)[0])
+        penalty = torch.min((A[:,:,1] - B[:,:,0] + eps).clamp(0).min(dim=-1)[0], (B[:,:,1] - A[:,:,0] + eps).clamp(0).min(dim=-1)[0])
         return penalty[_needing_push_mask].sum() / num_needing_push_mask
 
 
