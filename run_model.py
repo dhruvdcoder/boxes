@@ -155,9 +155,12 @@ hyperparam_optimization_instance_values = {
 hyperparam_optimization_instance_values.pop("path", None)
 
 sql_conn = sqlite3.connect("train.db")
-sql_logging.create_or_update_table_and_cols_(sql_conn, "Hyperparameter_Optimization_Instances", sql_hyperparameter_optimization_instance_columns)
-hyper_opt_id = sql_logging.write_dict_(sql_conn, "Hyperparameter_Optimization_Instances", hyperparam_optimization_instance_values)
-sql_logging.create_or_update_table_and_cols_(sql_conn, "Training_Instances", sql_training_instance_columns)
+try:
+    hyper_opt_id = sqlite_logger.write_dict_(sql_conn, "Hyperparameter_Optimization_Instances", hyperparam_optimization_instance_values)
+except sqlite3.Error:
+    sqlite_logger.create_or_update_table_and_cols_(sql_conn, "Hyperparameter_Optimization_Instances", sql_hyperparameter_optimization_instance_columns)
+    hyper_opt_id = sqlite_logger.write_dict_(sql_conn, "Hyperparameter_Optimization_Instances", hyperparam_optimization_instance_values)
+sqlite_logger.create_or_update_table_and_cols_(sql_conn, "Training_Instances", sql_training_instance_columns)
 ##############################
 # Load Data
 ##############################

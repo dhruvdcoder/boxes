@@ -1,6 +1,5 @@
 from . import *
 from learner import *
-from learner import sql_logging
 from pprint import pprint
 from sqlite3 import Connection
 from dataclasses import dataclass, field
@@ -24,6 +23,7 @@ class Objective:
     projected_gradient_descent: bool = False
     hyper_opt_id: Optional[int] = None
     sql_conn: Optional[Connection] = None
+    properties: dict = field(default_factory=dict)
 
     def __post_init__(self):
         self.num_boxes = self.unary_probs.shape[0]
@@ -40,6 +40,15 @@ class Objective:
         print(f"\n[{self.hyper_opt_iteration}] (Hyperoptimization Iteration)")
         pprint(hyperparameters)
 
+        neptune.init(project_qualified_name="mboratko/sandbox")
+        neptune.create_experiment(
+            params={
+                **self.properties,
+                **hyperparameters,
+                "torch_random_seed": random_seed,
+            }
+        )
+
         b = BoxModel(
             BoxParamType = self.BoxParamType,
             vol_func = self.vol_func,
@@ -48,8 +57,7 @@ class Objective:
             dims = hyperparameters["dims"],
             init_min_vol = self.init_min_vol,
             universe_box = self.universe_box
-        )
-        b.to(self.device)
+        ).to(self.device)
 
         train_dl = DataLoader(
             self.train,
@@ -80,25 +88,24 @@ class Objective:
             MetricCallback(rec_col.dev, self.dev, metric_spearman_r),
             PercentIncreaseEarlyStopping(rec_col.dev, "mean_cond_kl_loss", 0.25, 10),
             PercentIncreaseEarlyStopping(rec_col.dev, "mean_cond_kl_loss", 0.5),
+            NeptuneCallback(rec_col.dev, "VALID"),
+            NeptuneCallback(rec_col.train, "TRAIN"),
             StopIfNaN(),
             *self.extra_callbacks,
         )
 
-        l = Learner(train_dl, b, loss_func, opt, callbacks, recorder = rec_col.learn)
+        l = Learner(train_dl, b, loss_func, opt, callbacks, recorder=rec_col.learn, reraise_keyboard_interrupt=True)
         l.train(self.epochs, progress_bar=False)
 
         obj_to_min = self.obj_func_to_min(rec_col)
 
-        if self.sql_conn is not None:
-            hyperparam_to_save = {**hyperparameters,
-                                  "hyper_opt_iteration": self.hyper_opt_iteration,
-                                  "torch_random_seed": random_seed,
-                                  "hyper_opt_id": self.hyper_opt_id,
-                                  }
-            training_instance_id = sql_logging.write_dict_(self.sql_conn, "Training_Instances", hyperparam_to_save)
-            sql_logging.save_recorder_to_sql_(self.sql_conn, rec_col.train, "Train", training_instance_id)
-            sql_logging.save_recorder_to_sql_(self.sql_conn, rec_col.dev, "Dev", training_instance_id)
-            print(f"Saved: Training Instance [{training_instance_id}]\n")
+        # if self.sql_conn is not None:
+
+
+        #     training_instance_id = sqlite_logger.write_dict_(self.sql_conn, "Training_Instances", hyperparam_to_save)
+        #     sqlite_logger.save_recorder_to_sql_(self.sql_conn, rec_col.train, "Train", training_instance_id)
+        #     sqlite_logger.save_recorder_to_sql_(self.sql_conn, rec_col.dev, "Dev", training_instance_id)
+        #     print(f"Saved: Training Instance [{training_instance_id}]\n")
 
         return obj_to_min
 
