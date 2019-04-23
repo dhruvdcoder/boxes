@@ -90,8 +90,8 @@ class Objective:
             MetricCallback(rec_col.dev, self.dev, metric_spearman_r),
             PercentIncreaseEarlyStopping(rec_col.dev, "mean_cond_kl_loss", 0.25, 10),
             PercentIncreaseEarlyStopping(rec_col.dev, "mean_cond_kl_loss", 0.5),
-            SacredCallback(rec_col.dev, ex, "VALID"),
-            SacredCallback(rec_col.train, ex, "TRAIN"),
+            # SacredCallback(rec_col.dev, ex, "VALID"),
+            # SacredCallback(rec_col.train, ex, "TRAIN"),
             StopIfNaN(),
             *self.extra_callbacks,
         )
