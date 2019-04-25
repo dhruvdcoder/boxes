@@ -58,7 +58,7 @@ class Boxes(Module):
     """
 
     def __init__(self, num_models: int, num_boxes: int, dims: int,
-                 init_min_vol: float = default_init_min_vol, gibbs_iter: int = 2000, **kwargs):
+                 init_min_vol: float = default_init_min_vol, method = "gibbs", gibbs_iter: int = 2000, **kwargs):
         """
         Creates the Parameters used for the representation of boxes.
         Initializes boxes with a uniformly random distribution of coordinates, ensuring that each box
@@ -71,19 +71,31 @@ class Boxes(Module):
         :param kwargs: Unused for now, but include this for future possible parameters.
         """
         super().__init__()
+        if method == "gibbs":
+            sides = torch.ones(num_models, num_boxes, dims)
+            log_min_vol = torch.log(torch.tensor(init_min_vol))
+            for i in range(gibbs_iter):
+                idx = torch.randint(0, dims, (num_models, num_boxes))[:, :, None]
+                sides.scatter_(2, idx, 1)
+                complement = torch.log(sides).sum(dim=-1)
+                min = torch.exp(log_min_vol - complement)[:, :, None]
+                new_lengths = min + torch.rand(idx.shape) * (1 - min)
+                sides.scatter_(2, idx, new_lengths)
 
-        sides = torch.ones(num_models, num_boxes, dims)
-        log_min_vol = torch.log(torch.tensor(init_min_vol))
-        for i in range(gibbs_iter):
-            idx = torch.randint(0, dims, (num_models, num_boxes))[:, :, None]
-            sides.scatter_(2, idx, 1)
-            complement = torch.log(sides).sum(dim=-1)
-            min = torch.exp(log_min_vol - complement)[:, :, None]
-            new_lengths = min + torch.rand(idx.shape) * (1 - min)
-            sides.scatter_(2, idx, new_lengths)
+            z = torch.rand(num_models, num_boxes, dims) * (1-sides)
+            Z = z + sides
 
-        z = torch.rand(num_models, num_boxes, dims) * (1-sides)
-        Z = z + sides
+        else:
+            rand_param = lambda min, max: min + torch.rand(num_models, num_boxes, dims) * (max - min)
+            if init_min_vol == 0:
+                per_dim_min = 0
+            elif init_min_vol > 0:
+                per_dim_min = torch.tensor(init_min_vol).pow(1/dims)
+            else:
+                raise ValueError(f"init_min_vol={init_min_vol} is an invalid option.")
+
+            z = rand_param(0, 1-per_dim_min)
+            Z = rand_param(z+per_dim_min, 1)
 
         self.boxes = Parameter(torch.stack((z, Z), dim=2))
 
@@ -276,9 +288,9 @@ class WeightedSum(Module):
 class BoxModel(Module):
     def __init__(self, BoxParamType: type, vol_func: Callable,
                  num_models:int, num_boxes:int, dims:int,
-                 init_min_vol: float = default_init_min_vol, universe_box: Optional[Callable] = None):
+                 init_min_vol: float = default_init_min_vol, universe_box: Optional[Callable] = None, **kwargs):
         super().__init__()
-        self.box_embedding = BoxParamType(num_models, num_boxes, dims, init_min_vol)
+        self.box_embedding = BoxParamType(num_models, num_boxes, dims, init_min_vol, **kwargs)
         self.vol_func = vol_func
 
         if universe_box is None:
