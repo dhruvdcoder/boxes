@@ -57,7 +57,8 @@ class Boxes(Module):
     taken to preserve max > min while training. (See MinBoxSize Callback.)
     """
 
-    def __init__(self, num_models: int, num_boxes: int, dims: int, init_min_vol: float = default_init_min_vol, **kwargs):
+    def __init__(self, num_models: int, num_boxes: int, dims: int,
+                 init_min_vol: float = default_init_min_vol, gibbs_iter: int = 2000, **kwargs):
         """
         Creates the Parameters used for the representation of boxes.
         Initializes boxes with a uniformly random distribution of coordinates, ensuring that each box
@@ -70,16 +71,19 @@ class Boxes(Module):
         :param kwargs: Unused for now, but include this for future possible parameters.
         """
         super().__init__()
-        rand_param = lambda min, max: min + torch.rand(num_models, num_boxes, dims) * (max - min)
-        if init_min_vol == 0:
-            per_dim_min = 0
-        elif init_min_vol > 0:
-            per_dim_min = torch.tensor(init_min_vol).pow(1/dims)
-        else:
-            raise ValueError(f"init_min_vol={init_min_vol} is an invalid option.")
 
-        z = rand_param(0, 1-per_dim_min)
-        Z = rand_param(z+per_dim_min, 1)
+        sides = torch.ones(num_models, num_boxes, dims)
+        log_min_vol = torch.log(torch.tensor(init_min_vol))
+        for i in range(gibbs_iter):
+            idx = torch.randint(0, dims, (num_models, num_boxes))[:, :, None]
+            sides.scatter_(2, idx, 1)
+            complement = torch.log(sides).sum(dim=-1)
+            min = torch.exp(log_min_vol - complement)[:, :, None]
+            new_lengths = min + torch.rand(idx.shape) * (1 - min)
+            sides.scatter_(2, idx, new_lengths)
+
+        z = torch.rand(num_models, num_boxes, dims) * (1-sides)
+        Z = z + sides
 
         self.boxes = Parameter(torch.stack((z, Z), dim=2))
 
