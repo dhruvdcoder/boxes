@@ -136,7 +136,7 @@ class MinMaxBoxes(Module):
         :param kwargs: Unused for now, but include this for future possible parameters.
         """
         super().__init__()
-        unit_boxes = Boxes(num_models, num_boxes, dim, init_min_vol)
+        unit_boxes = Boxes(num_models, num_boxes, dim, init_min_vol, **kwargs)
         self.boxes = Parameter(unit_boxes.boxes.detach().clone())
         del unit_boxes
 
@@ -165,7 +165,7 @@ class DeltaBoxes(Module):
 
     def __init__(self, num_models: int, num_boxes: int, dim: int, init_min_vol: float = default_init_min_vol, **kwargs):
         super().__init__()
-        unit_boxes = Boxes(num_models, num_boxes, dim, init_min_vol)
+        unit_boxes = Boxes(num_models, num_boxes, dim, init_min_vol, **kwargs)
         self._from_UnitBoxes(unit_boxes)
         del unit_boxes
 
@@ -202,7 +202,7 @@ class SigmoidBoxes(Module):
 
     def __init__(self, num_models: int, num_boxes: int, dim: int, init_min_vol: float = default_init_min_vol,  **kwargs):
         super().__init__()
-        unit_boxes = Boxes(num_models, num_boxes, dim, init_min_vol)
+        unit_boxes = Boxes(num_models, num_boxes, dim, init_min_vol, **kwargs)
         self._from_UnitBoxes(unit_boxes)
         del unit_boxes
 
@@ -248,7 +248,7 @@ class MinMaxSigmoidBoxes(Module):
 
     def __init__(self, num_models: int, num_boxes: int, dim: int, init_min_vol: float = default_init_min_vol,  **kwargs):
         super().__init__()
-        unit_boxes = Boxes(num_models, num_boxes, dim, init_min_vol)
+        unit_boxes = Boxes(num_models, num_boxes, dim, init_min_vol, **kwargs)
         self._from_UnitBoxes(unit_boxes)
         del unit_boxes
 
@@ -314,20 +314,93 @@ class BoxModel(Module):
         else:
             box_embeddings = box_embeddings_orig
 
-        unary_probs = self.vol_func(box_embeddings)
+        unary_probs = self.weights(self.vol_func(box_embeddings))
 
         # Conditional
         A = box_embeddings[:, box_indices[:,0]]
         B = box_embeddings[:, box_indices[:,1]]
-        P_A_given_B = self.vol_func(intersection(A, B)) / (unary_probs[:, box_indices[:,1]] + torch.finfo(torch.float32).tiny)
+        P_A_given_B = self.weights(self.vol_func(intersection(A, B))) / (unary_probs[:, box_indices[:,1]] + torch.finfo(torch.float32).tiny)
 
         # Scale Unary
-        unary_probs = unary_probs / self.universe_vol(box_embeddings)
+        unary_probs = unary_probs / self.weights(self.universe_vol(box_embeddings))
 
         return {
-            "unary_probs": self.weights(unary_probs),
+            "unary_probs": unary_probs,
             "box_embeddings": box_embeddings_orig,
             "A": A,
             "B": B,
-            "P(A|B)": self.weights(P_A_given_B),
+            "P(A|B)": P_A_given_B,
+        }
+
+
+class BoxModelTriples(Module):
+    def __init__(self, BoxParamType: type, vol_func: Callable,
+                 num_models:int, num_boxes:int, dims:int,
+                 init_min_vol: float = default_init_min_vol, universe_box: Optional[Callable] = None, **kwargs):
+        super().__init__()
+        self.box_embedding = BoxParamType(num_models, num_boxes, dims, init_min_vol, **kwargs)
+        self.vol_func = vol_func
+
+        if universe_box is None:
+            z = torch.zeros(dims)
+            Z = torch.ones(dims)
+            self.universe_box = lambda _: torch.stack((z,Z))[None, None]
+            self.universe_vol = lambda _: self.vol_func(self.universe_box(None)).squeeze()
+            self.clamp = True
+        else:
+            self.universe_box = universe_box
+            self.universe_vol = lambda b: self.vol_func(self.universe_box(b))
+            self.clamp = False
+
+        self.weights = WeightedSum(num_models)
+
+    def forward(self, ids):
+        # Unary
+        box_embeddings_orig = self.box_embedding()
+        if self.clamp:
+            box_embeddings = box_embeddings_orig.clamp(0,1)
+        else:
+            box_embeddings = box_embeddings_orig
+
+        # unary_probs = self.vol_func(box_embeddings)
+
+        probs = torch.zeros(ids.shape[0]).to(box_embeddings_orig.device)
+
+        unary_box_mask = ids[:,0] == ids[:,1]
+        three_boxes_mask = ids[:,1] != ids[:,2]
+        two_boxes_mask = (1-three_boxes_mask) * (1-unary_box_mask)
+
+        num_unary_boxes = torch.sum(unary_box_mask)
+        if num_unary_boxes > 0:
+            unary_boxes = box_embeddings[:,ids[unary_box_mask,0]]
+            unary_probs = self.weights(self.vol_func(unary_boxes))
+            # Scale Unary
+            unary_probs = unary_probs / self.weights(self.universe_vol(box_embeddings))
+            probs[unary_box_mask] = unary_probs
+
+        num_two_boxes = torch.sum(two_boxes_mask)
+        if num_two_boxes > 0:
+            A = box_embeddings[:, ids[two_boxes_mask, 0]]
+            B = box_embeddings[:, ids[two_boxes_mask, 1]]
+            two_vol = self.weights(self.vol_func(intersection(A, B)))
+            two_div = self.weights(self.vol_func(A)) + 10*torch.finfo(torch.float32).tiny
+            two_cond = two_vol / two_div
+            probs[two_boxes_mask] = two_cond
+
+        num_three_boxes = torch.sum(three_boxes_mask)
+        if num_three_boxes > 0:
+            A = box_embeddings[:, ids[three_boxes_mask, 0]]
+            B = box_embeddings[:, ids[three_boxes_mask, 1]]
+            C = box_embeddings[:, ids[three_boxes_mask, 2]]
+            A_int_B = intersection(A, B)
+            three_vol = self.weights(self.vol_func(intersection(A_int_B, C)))
+            three_div = self.weights(self.vol_func(A_int_B)) + 10*torch.finfo(torch.float32).tiny
+            three_cond = three_vol / three_div
+            probs[three_boxes_mask] = three_cond
+
+        return {
+            "box_embeddings": box_embeddings_orig,
+            "probs": probs,
+            'weights_layer': self.weights,
+            'parts': ids[:,-1],
         }
