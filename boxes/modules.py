@@ -75,7 +75,7 @@ class Boxes(Module):
             sides = torch.ones(num_models, num_boxes, dims)
             log_min_vol = torch.log(torch.tensor(init_min_vol))
             for i in range(gibbs_iter):
-                idx = torch.randint(0, dims, (num_models, num_boxes))[:, :, None]
+                idx = torch.randint(0, int(dims), (num_models, num_boxes))[:, :, None]
                 sides.scatter_(2, idx, 1)
                 complement = torch.log(sides).sum(dim=-1)
                 min = torch.exp(log_min_vol - complement)[:, :, None]
@@ -314,15 +314,12 @@ class BoxModel(Module):
         else:
             box_embeddings = box_embeddings_orig
 
-        unary_probs = self.weights(self.vol_func(box_embeddings))
+        unary_probs = self.weights(self.vol_func(box_embeddings) / self.universe_vol(box_embeddings))
 
         # Conditional
         A = box_embeddings[:, box_indices[:,0]]
         B = box_embeddings[:, box_indices[:,1]]
-        P_A_given_B = self.weights(self.vol_func(intersection(A, B))) / (unary_probs[:, box_indices[:,1]] + torch.finfo(torch.float32).tiny)
-
-        # Scale Unary
-        unary_probs = unary_probs / self.weights(self.universe_vol(box_embeddings))
+        P_A_given_B = self.weights(self.vol_func(intersection(A, B)) / self.universe_vol(box_embeddings)) / (unary_probs[box_indices[:,1]] + torch.finfo(torch.float32).tiny)
 
         return {
             "unary_probs": unary_probs,
@@ -362,6 +359,8 @@ class BoxModelTriples(Module):
         else:
             box_embeddings = box_embeddings_orig
 
+        universe_vol = self.universe_vol(box_embeddings)
+
         # unary_probs = self.vol_func(box_embeddings)
 
         probs = torch.zeros(ids.shape[0]).to(box_embeddings_orig.device)
@@ -373,17 +372,15 @@ class BoxModelTriples(Module):
         num_unary_boxes = torch.sum(unary_box_mask)
         if num_unary_boxes > 0:
             unary_boxes = box_embeddings[:,ids[unary_box_mask,0]]
-            unary_probs = self.weights(self.vol_func(unary_boxes))
-            # Scale Unary
-            unary_probs = unary_probs / self.weights(self.universe_vol(box_embeddings))
+            unary_probs = self.weights(self.vol_func(unary_boxes) / universe_vol)
             probs[unary_box_mask] = unary_probs
 
         num_two_boxes = torch.sum(two_boxes_mask)
         if num_two_boxes > 0:
             A = box_embeddings[:, ids[two_boxes_mask, 0]]
             B = box_embeddings[:, ids[two_boxes_mask, 1]]
-            two_vol = self.weights(self.vol_func(intersection(A, B)))
-            two_div = self.weights(self.vol_func(A)) + 10*torch.finfo(torch.float32).tiny
+            two_vol = self.weights(self.vol_func(intersection(A, B)) / universe_vol)
+            two_div = self.weights(self.vol_func(A) / universe_vol) + torch.finfo(torch.float32).tiny
             two_cond = two_vol / two_div
             probs[two_boxes_mask] = two_cond
 
@@ -393,8 +390,8 @@ class BoxModelTriples(Module):
             B = box_embeddings[:, ids[three_boxes_mask, 1]]
             C = box_embeddings[:, ids[three_boxes_mask, 2]]
             A_int_B = intersection(A, B)
-            three_vol = self.weights(self.vol_func(intersection(A_int_B, C)))
-            three_div = self.weights(self.vol_func(A_int_B)) + 10*torch.finfo(torch.float32).tiny
+            three_vol = self.weights(self.vol_func(intersection(A_int_B, C)) / universe_vol)
+            three_div = self.weights(self.vol_func(A_int_B) / universe_vol) + torch.finfo(torch.float32).tiny
             three_cond = three_vol / three_div
             probs[three_boxes_mask] = three_cond
 
