@@ -314,12 +314,16 @@ class BoxModel(Module):
         else:
             box_embeddings = box_embeddings_orig
 
-        unary_probs = self.weights(self.vol_func(box_embeddings) / self.universe_vol(box_embeddings))
+        universe_vol = self.universe_vol(box_embeddings)
+
+        unary_probs = self.weights(self.vol_func(box_embeddings) / universe_vol)
 
         # Conditional
         A = box_embeddings[:, box_indices[:,0]]
         B = box_embeddings[:, box_indices[:,1]]
-        P_A_given_B = self.weights(self.vol_func(intersection(A, B)) / self.universe_vol(box_embeddings)) / (unary_probs[box_indices[:,1]] + torch.finfo(torch.float32).tiny)
+        A_int_B_vol = self.weights(self.vol_func(intersection(A, B)) / universe_vol) + torch.finfo(torch.float32).tiny
+        B_vol = unary_probs[box_indices[:,1]] + torch.finfo(torch.float32).tiny
+        P_A_given_B = torch.exp(torch.log(A_int_B_vol) - torch.log(B_vol))
 
         return {
             "unary_probs": unary_probs,
@@ -379,9 +383,9 @@ class BoxModelTriples(Module):
         if num_two_boxes > 0:
             A = box_embeddings[:, ids[two_boxes_mask, 0]]
             B = box_embeddings[:, ids[two_boxes_mask, 1]]
-            two_vol = self.weights(self.vol_func(intersection(A, B)) / universe_vol)
+            two_vol = self.weights(self.vol_func(intersection(A, B)) / universe_vol) + torch.finfo(torch.float32).tiny
             two_div = self.weights(self.vol_func(A) / universe_vol) + torch.finfo(torch.float32).tiny
-            two_cond = two_vol / two_div
+            two_cond = torch.exp(torch.log(two_vol) - torch.log(two_div))
             probs[two_boxes_mask] = two_cond
 
         num_three_boxes = torch.sum(three_boxes_mask)
@@ -390,9 +394,9 @@ class BoxModelTriples(Module):
             B = box_embeddings[:, ids[three_boxes_mask, 1]]
             C = box_embeddings[:, ids[three_boxes_mask, 2]]
             A_int_B = intersection(A, B)
-            three_vol = self.weights(self.vol_func(intersection(A_int_B, C)) / universe_vol)
+            three_vol = self.weights(self.vol_func(intersection(A_int_B, C)) / universe_vol) + torch.finfo(torch.float32).tiny
             three_div = self.weights(self.vol_func(A_int_B) / universe_vol) + torch.finfo(torch.float32).tiny
-            three_cond = three_vol / three_div
+            three_cond = torch.exp(torch.log(three_vol) - torch.log(three_div))
             probs[three_boxes_mask] = three_cond
 
         return {
