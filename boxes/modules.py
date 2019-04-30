@@ -327,7 +327,7 @@ class BoxModel(Module):
 
         return {
             "unary_probs": unary_probs,
-            "box_embeddings": box_embeddings_orig,
+            "box_embeddings_orig": box_embeddings_orig,
             "A": A,
             "B": B,
             "P(A|B)": P_A_given_B,
@@ -379,6 +379,8 @@ class BoxModelTriples(Module):
             unary_probs = self.weights(self.vol_func(unary_boxes) / universe_vol)
             probs[unary_box_mask] = unary_probs
 
+
+        two_vol = torch.tensor([]).to(box_embeddings.device)
         num_two_boxes = torch.sum(two_boxes_mask)
         if num_two_boxes > 0:
             A = box_embeddings[:, ids[two_boxes_mask, 0]]
@@ -400,8 +402,14 @@ class BoxModelTriples(Module):
             probs[three_boxes_mask] = three_cond
 
         return {
-            "box_embeddings": box_embeddings_orig,
+            "box_embeddings": box_embeddings,
+            "box_embeddings_orig": box_embeddings_orig,
+            "ids": ids,
             "probs": probs,
             'weights_layer': self.weights,
             'parts': ids[:,-1],
+            "unary_box_mask": unary_box_mask,
+            "two_boxes_mask": two_boxes_mask,
+            "three_boxes_mask": three_boxes_mask,
+            "two_vol": two_vol,
         }

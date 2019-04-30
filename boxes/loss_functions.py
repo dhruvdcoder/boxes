@@ -2,14 +2,15 @@ from .box_operations import *
 import torch
 from torch import Tensor
 import torch.nn.functional as F
+from torch.nn import Module
 from typing import *
 
 
-ModelOutput = Dict[str, Tensor]
+ModelOutput = Dict[str, Union[Tensor, Module]]
 
 
 def mean_unit_cube_loss(model_out: ModelOutput, _) -> Tensor:
-    return ((model_out["box_embeddings"] - 1).clamp(0) + (-model_out["box_embeddings"]).clamp(0)).sum(dim=[-2, -1]).mean()
+    return ((model_out["box_embeddings_orig"] - 1).clamp(0) + (-model_out["box_embeddings_orig"]).clamp(0)).sum(dim=[-2, -1]).mean()
 
 
 def mean_unary_kl_loss(unary: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Callable:
@@ -37,23 +38,23 @@ def mean_pull_loss(model_out: ModelOutput, target: Tensor, eps: float = 1e-6) ->
     """
     A, B = model_out["A"], model_out["B"]
     _needing_pull_mask = needing_pull_mask(A, B, target)
-    num_needing_pull_mask = _needing_pull_mask.sum()
-    if num_needing_pull_mask == 0:
+    num_needing_pull = _needing_pull_mask.sum()
+    if num_needing_pull == 0:
         return 0
     else:
         penalty = ((A[:,:,0] - B[:,:,1] + eps).clamp(0) + (B[:,:,0] - A[:,:,1] + eps).clamp(0)).sum(dim=-1)
-        return penalty[_needing_pull_mask].sum() / num_needing_pull_mask
+        return penalty[_needing_pull_mask].sum() / num_needing_pull
 
 
 def mean_push_loss(model_out: ModelOutput, target: Tensor, eps: float = 1e-6) -> Tensor:
     A, B = model_out["A"], model_out["B"]
     _needing_push_mask = needing_push_mask(A, B, target)
-    num_needing_push_mask = _needing_push_mask.sum()
-    if num_needing_push_mask == 0:
+    num_needing_push = _needing_push_mask.sum()
+    if num_needing_push == 0:
         return 0
     else:
         penalty = torch.min((A[:,:,1] - B[:,:,0] + eps).clamp(0).min(dim=-1)[0], (B[:,:,1] - A[:,:,0] + eps).clamp(0).min(dim=-1)[0])
-        return penalty[_needing_push_mask].sum() / num_needing_push_mask
+        return penalty[_needing_push_mask].sum() / num_needing_push
 
 
 def mean_surrogate_loss(model_out: ModelOutput, target: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
@@ -63,10 +64,28 @@ def mean_surrogate_loss(model_out: ModelOutput, target: Tensor, eps: float = tor
     A, B = model_out["A"], model_out["B"]
     A_join_B = join(A, B)
     _needing_pull_mask = needing_pull_mask(A, B, target)
-    num_needing_pull_mask = _needing_pull_mask.sum()
-    if num_needing_pull_mask == 0:
+    num_needing_pull = _needing_pull_mask.sum()
+    if num_needing_pull == 0:
         return 0
     else:
         surrogate = clamp_volume(A_join_B) - clamp_volume(A) - clamp_volume(B)
         penalty = torch.log(surrogate.clamp_min(eps)) - torch.log(clamp_volume(A).clamp_min(eps))
-        return (target[_needing_pull_mask[0]] * penalty[_needing_pull_mask]).sum() / num_needing_pull_mask
+        return (target[_needing_pull_mask[0]] * penalty[_needing_pull_mask]).sum() / num_needing_pull
+
+
+def mean_weighted_pull_loss(model_out: ModelOutput, target: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
+    ids = model_out["ids"]
+    two_boxes_mask = model_out["two_boxes_mask"]
+    box_embeddings = model_out["box_embeddings"]
+    two_vol = model_out["two_vol"]
+    A = box_embeddings[:, ids[two_boxes_mask, 0]]
+    B = box_embeddings[:, ids[two_boxes_mask, 1]]
+    target_prob_A_given_B = target[two_boxes_mask]
+
+    _needing_pull_mask = (two_vol <= eps) & (target_prob_A_given_B > eps)
+    num_needing_pull = _needing_pull_mask.sum()
+    if num_needing_pull == 0:
+        return 0
+    else:
+        penalty = ((A[:,:,0] - B[:,:,1] + eps).clamp(0) + (B[:,:,0] - A[:,:,1] + eps).clamp(0)).sum(dim=-1)
+        return model_out["weights_layer"](penalty[:,_needing_pull_mask].sum(dim=1)) / num_needing_pull
