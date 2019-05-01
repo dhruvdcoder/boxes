@@ -291,7 +291,7 @@ class LogWeightedSum(Module):
         self.weights = Parameter(torch.rand(num_models))
 
     def forward(self, log_box_vols: Tensor) -> Tensor:
-        return (torch.logsumexp(self.weights[None] @ log_box_vols, 0) - torch.logsumexp(self.weights, 0))
+        return (torch.logsumexp(self.weights + log_box_vols, 0) - torch.logsumexp(self.weights, 0))
 
 
 class BoxModel(Module):
