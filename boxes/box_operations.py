@@ -66,8 +66,8 @@ def smallest_containing_box_outside_unit_cube(boxes: Tensor) -> Tensor:
     Z = boxes[:,:,1]
     min_z, _ = torch.min(z, dim=1, keepdim=True)
     max_Z, _ = torch.max(Z, dim=1, keepdim=True)
-    min_z.clamp_max(0)
-    max_Z.clamp_min(1)
+    min_z = min_z.clamp_max(0)
+    max_Z = max_Z.clamp_min(1)
     return torch.stack((min_z, max_Z), dim=2)
 
 
