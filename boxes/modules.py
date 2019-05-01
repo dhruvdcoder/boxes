@@ -285,6 +285,15 @@ class WeightedSum(Module):
         return (F.softmax(self.weights, dim=0).unsqueeze(0) @ box_vols).squeeze()
 
 
+class LogWeightedSum(Module):
+    def __init__(self, num_models: int) -> None:
+        super().__init__()
+        self.weights = Parameter(torch.rand(num_models))
+
+    def forward(self, log_box_vols: Tensor) -> Tensor:
+        return (torch.logsumexp(self.weights[None] @ log_box_vols) - torch.logsumexp(self.weights))
+
+
 class BoxModel(Module):
     def __init__(self, BoxParamType: type, vol_func: Callable,
                  num_models:int, num_boxes:int, dims:int,
@@ -331,6 +340,56 @@ class BoxModel(Module):
             "A": A,
             "B": B,
             "P(A|B)": P_A_given_B,
+        }
+
+
+class BoxModelStable(Module):
+    def __init__(self, BoxParamType: type, log_vol_func: Callable,
+                 num_models: int, num_boxes: int, dims: int,
+                 init_min_vol: float = default_init_min_vol,
+                 universe_box: Optional[Callable] = None, **kwargs):
+        super().__init__()
+        self.box_embedding = BoxParamType(num_models, num_boxes, dims, init_min_vol, **kwargs)
+        self.log_vol_func = log_vol_func
+
+        if universe_box is None:
+            z = torch.zeros(dims)
+            Z = torch.ones(dims)
+            self.universe_box = lambda _: torch.stack((z,Z))[None, None]
+            self.log_universe_vol = lambda _: self.log_vol_func(self.universe_box(None)).squeeze()
+            self.clamp = True
+        else:
+            self.universe_box = universe_box
+            self.log_universe_vol = lambda b: self.log_vol_func(self.universe_box(b))
+            self.clamp = False
+
+        self.weights = LogWeightedSum(num_models)
+
+    def forward(self, box_indices: Tensor) -> Dict:
+        # Unary
+        box_embeddings_orig = self.box_embedding()
+        if self.clamp:
+            box_embeddings = box_embeddings_orig.clamp(0,1)
+        else:
+            box_embeddings = box_embeddings_orig
+
+        log_universe_vol = self.log_universe_vol(box_embeddings)
+
+        log_unary_probs = self.weights(self.log_vol_func(box_embeddings) -  log_universe_vol)
+
+        # Conditional
+        A = box_embeddings[:, box_indices[:,0]]
+        B = box_embeddings[:, box_indices[:,1]]
+        log_A_int_B_vol = self.weights(self.log_vol_func(intersection(A, B)) - log_universe_vol)
+        log_B_vol = log_unary_probs[box_indices[:,1]]
+        log_P_A_given_B = log_A_int_B_vol - log_B_vol
+
+        return {
+            "log_unary_probs": log_unary_probs,
+            "box_embeddings_orig": box_embeddings_orig,
+            "A": A,
+            "B": B,
+            "log P(A|B)": log_P_A_given_B,
         }
 
 
