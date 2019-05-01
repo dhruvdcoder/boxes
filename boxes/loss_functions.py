@@ -21,6 +21,13 @@ def mean_unary_kl_loss(unary: Tensor, eps: float = torch.finfo(torch.float32).ti
     return mean_unary_kl_loss
 
 
+def mean_unary_kl_loss_log(unary: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Callable:
+    """ Factory Function to create the actual mean_unary_kl_loss function with the given set of unary probabilities. """
+    def mean_unary_kl_loss_log(model_out: ModelOutput, _) -> Tensor:
+        return kl_div_sym_log(model_out["log_unary_probs"], unary, eps).mean()
+    return mean_unary_kl_loss_log
+
+
 def mean_cond_kl_loss(model_out: ModelOutput, target: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
     return kl_div_sym(model_out["P(A|B)"], target, eps).mean()
 
