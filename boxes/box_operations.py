@@ -42,6 +42,22 @@ def soft_volume(boxes: Tensor) -> Tensor:
     return torch.prod(F.softplus(boxes[:,:,1] - boxes[:,:,0]), dim=-1)
 
 
+def log_clamp_volume(boxes: Tensor, eps:float = torch.finfo(torch.float32).tiny) -> Tensor:
+    """
+    :param boxes: Tensor(model, box, zZ, dim)
+    :return: Tensor(model, box) of volumes
+    """
+    return torch.sum(torch.log((boxes[:,:,1] - boxes[:,:,0]).clamp_min(0) + eps), dim=-1)
+
+
+def log_soft_volume(boxes: Tensor, eps:float = torch.finfo(torch.float32).tiny) -> Tensor:
+    """
+    :param sidelengths: Tensor(model, box, dim)
+    :return: Tensor(model, box) of volumes
+    """
+    return torch.sum(torch.log(F.softplus(boxes[:,:,1] - boxes[:,:,0]) + eps), dim=-1)
+
+
 def smallest_containing_box(boxes: Tensor) -> Tensor:
     """
     Returns the smallest box which contains all boxes in `boxes`.

@@ -1,8 +1,9 @@
 import pytest
 from hypothesis import given, example
 from hypothesis import strategies as st
-from .box_operations import *
-from .modules import *
+from boxes.box_operations import *
+from boxes.modules import *
+import torch
 import copy
 
 test_cases = dict()
@@ -171,6 +172,7 @@ def test_single_ids(boxparam, A, B):
     assert (A == boxparam(torch.tensor([0]))).all()
     assert (B == boxparam(torch.tensor([1]))).all()
 
+
 @pytest.mark.parametrize(*params_from(test_cases, "boxparam", "A", "B"))
 def test_pair_ids(boxparam, A, B):
     out = boxparam(torch.tensor([[0,1]]))
@@ -179,10 +181,17 @@ def test_pair_ids(boxparam, A, B):
     assert (A == out_A).all()
     assert (B == out_B).all()
 
+
 @pytest.mark.parametrize(*params_from(test_cases, "boxparam", "vol_func", "volumes"))
 def test_volume(boxparam, vol_func, volumes):
     out = vol_func(boxparam())
     assert (torch.isclose(out, volumes)).all()
+
+
+@pytest.mark.parametrize(*params_from(test_cases, "boxparam", "volumes"))
+def test_log_clamp_volume(boxparam, volumes):
+    out = log_clamp_volume(boxparam())
+    assert (torch.isclose(out, torch.log(volumes))).all()
 
 
 @pytest.mark.parametrize(*params_from(test_cases, "boxes", "correct_smallest_containing_box"))

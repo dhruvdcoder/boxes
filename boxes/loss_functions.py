@@ -1,4 +1,5 @@
 from .box_operations import *
+from .utils import log1mexp
 import torch
 from torch import Tensor
 import torch.nn.functional as F
@@ -24,9 +25,19 @@ def mean_cond_kl_loss(model_out: ModelOutput, target: Tensor, eps: float = torch
     return kl_div_sym(model_out["P(A|B)"], target, eps).mean()
 
 
+def mean_cond_kl_loss_log(model_out: ModelOutput, target: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
+    return kl_div_sym_log(model_out["log P(A|B)"], target, eps).mean()
+
+
 def kl_div_sym(p: Tensor, q: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
     return kl_div_term(p, q, eps) + kl_div_term(1-p, 1-q, eps)
 
+
+def kl_div_sym_log(log_p: Tensor, q: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
+    return kl_div_term_log(log_p, q, eps) + kl_div_term_log(log1mexp(-p), 1-q, eps)
+
+def kl_div_term_log(log_p: Tensor, q: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
+    return F.kl_div(log_p, q.clamp_min(eps), reduction="none")
 
 def kl_div_term(p: Tensor, q: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
     return F.kl_div(torch.log(p.clamp_min(eps)), q.clamp_min(eps), reduction="none")
