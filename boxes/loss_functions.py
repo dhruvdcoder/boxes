@@ -44,7 +44,7 @@ def kl_div_sym_log(log_p: Tensor, q: Tensor, eps: float = torch.finfo(torch.floa
     return kl_div_term_log(log_p, q, eps) + kl_div_term_log(log1mexp(-log_p), 1-q, eps)
 
 def kl_div_term_log(log_p: Tensor, q: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
-    return F.kl_div(log_p, q.clamp_min(eps), reduction="none")
+    return F.kl_div(log_p, q, reduction="none")
 
 def kl_div_term(p: Tensor, q: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
     return F.kl_div(torch.log(p.clamp_min(eps)), q.clamp_min(eps), reduction="none")
