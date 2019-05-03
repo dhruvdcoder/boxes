@@ -390,6 +390,7 @@ class BoxModelStable(Module):
             "A": A,
             "B": B,
             "log P(A|B)": log_P_A_given_B,
+            "P(A|B)": torch.exp(log_P_A_given_B),
         }
 
 
