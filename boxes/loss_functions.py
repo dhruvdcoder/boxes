@@ -29,11 +29,76 @@ def mean_unary_kl_loss_log(unary: Tensor, eps: float = torch.finfo(torch.float32
 
 
 def mean_cond_kl_loss(model_out: ModelOutput, target: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
-    return kl_div_sym(model_out["P(A|B)"], target, eps).mean()
+    return kl_div_sym(model_out["P_A_B"] / model_out["P_B"], target[:, 4], eps).mean() + kl_div_sym(model_out["P_A_B"] / model_out["P_A"], target[:,5], eps).mean()
 
 
 def mean_cond_kl_loss_log(model_out: ModelOutput, target: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
     return kl_div_sym_log(model_out["log P(A|B)"], target, eps).mean()
+
+
+def mean_joint_kl_loss(model_out: ModelOutput, target: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
+    # P(A,B)
+    loss = kl_div_term(model_out["P_A_B"], target[:,0], eps)
+    # P(A,-B)
+    loss += kl_div_term(model_out["P_A"] - model_out["P_A_B"], target[:,1], eps)
+    # P(-A,B)
+    loss += kl_div_term(model_out["P_B"] - model_out["P_A_B"], target[:,2], eps)
+    # P(-A,-B)
+    loss += kl_div_term(1 - model_out["P_A"] - model_out["P_B"] + model_out["P_A_B"], target[:,3], eps)
+    return loss.mean()
+
+
+def mean_joint_kl_loss(model_out: ModelOutput, target: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
+    # P(A,B)
+    loss = kl_div_term(model_out["P_A_B"], target[:,0], eps)
+    # P(A,-B)
+    loss += kl_div_term(model_out["P_A"] - model_out["P_A_B"], target[:,1], eps)
+    # P(-A,B)
+    loss += kl_div_term(model_out["P_B"] - model_out["P_A_B"], target[:,2], eps)
+    # P(-A,-B)
+    loss += kl_div_term(1 - model_out["P_A"] - model_out["P_B"] + model_out["P_A_B"], target[:,3], eps)
+    return loss.mean()
+
+
+def mean_joint_jensen_shannon_loss(model_out: ModelOutput, target: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
+    # P(A,B)
+    loss = jensen_shannon(model_out["P_A_B"], target[:,0], eps)
+    # P(A,-B)
+    loss += jensen_shannon(model_out["P_A"] - model_out["P_A_B"], target[:,1], eps)
+    # P(-A,B)
+    loss += jensen_shannon(model_out["P_B"] - model_out["P_A_B"], target[:,2], eps)
+    # P(-A,-B)
+    loss += jensen_shannon(1 - model_out["P_A"] - model_out["P_B"] + model_out["P_A_B"], target[:,3], eps)
+    return loss.mean()
+
+
+def mean_joint_triple_jensen_shannon_loss(model_out: ModelOutput, target: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
+    # P(A,B,C)
+    loss = jensen_shannon(model_out["P_A_B_C"], target[:,0], eps)
+    # P(A,B,-C)
+    loss += jensen_shannon(model_out["P_A_B"] - model_out["P_A_B_C"], target[:,1], eps)
+    # P(A,-B,C)
+    loss += jensen_shannon(model_out["P_A_C"] - model_out["P_A_B_C"], target[:,2], eps)
+    # P(A,-B,-C) = P(A, -B) - P(A, -B, C) = P(A) - P(A, B) - (P(A, C) - P(A, B, C)) = P(A) - P(A, B) - P(A, C) + P(A, B, C)
+    loss += jensen_shannon(model_out["P_A"] - model_out["P_A_B"] - model_out["P_A_C"] + model_out["P_A_B_C"], target[:,3], eps)
+    # P(-A, B, C)
+    loss += jensen_shannon(model_out["P_B_C"] - model_out["P_A_B_C"], target[:,4], eps)
+    # P(-A, B, -C) = P(B) - P(A, B) - P(B, C) + P(A, B, C)
+    loss += jensen_shannon(model_out["P_B"] - model_out["P_A_B"] - model_out["P_B_C"] + model_out["P_A_B_C"], target[:,5], eps)
+    # P(-A, -B, C) = P(C) - P(A, C) - P(B, C) + P(A, B, C)
+    loss += jensen_shannon(model_out["P_C"] - model_out["P_A_C"] - model_out["P_B_C"] + model_out["P_A_B_C"], target[:,6], eps)
+    # P(-A, -B, -C)
+    loss += jensen_shannon(1 - model_out["P_A"] - model_out["P_B"] - model_out["P_C"]  + model_out["P_A_B"] + model_out["P_A_C"] + model_out["P_B_C"] - model_out["P_A_B_C"], target[:,7], eps)
+    return loss.mean()
+
+
+def mean_cond_jensen_shannon_loss(model_out: ModelOutput, target: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
+    return jensen_shannon(model_out["P_A_B"] / model_out["P_B"], target[:, 4], eps).mean() + jensen_shannon(model_out["P_A_B"] / model_out["P_A"], target[:,5], eps).mean()
+
+
+def jensen_shannon(p, q, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
+    m = (p + q) / 2
+    return (kl_div_term(p,m,eps) + kl_div_term(q,m,eps))/2
 
 
 def kl_div_sym(p: Tensor, q: Tensor, eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
@@ -55,7 +120,7 @@ def mean_pull_loss(model_out: ModelOutput, target: Tensor, eps: float = 1e-6) ->
     Pulls together boxes which are disjoint but should overlap.
     """
     A, B = model_out["A"], model_out["B"]
-    _needing_pull_mask = needing_pull_mask(A, B, target)
+    _needing_pull_mask = needing_pull_mask(A, B, target[:, 0])
     num_needing_pull = _needing_pull_mask.sum()
     if num_needing_pull == 0:
         return 0
@@ -66,7 +131,7 @@ def mean_pull_loss(model_out: ModelOutput, target: Tensor, eps: float = 1e-6) ->
 
 def mean_push_loss(model_out: ModelOutput, target: Tensor, eps: float = 1e-6) -> Tensor:
     A, B = model_out["A"], model_out["B"]
-    _needing_push_mask = needing_push_mask(A, B, target)
+    _needing_push_mask = needing_push_mask(A, B, target[:, 0])
     num_needing_push = _needing_push_mask.sum()
     if num_needing_push == 0:
         return 0

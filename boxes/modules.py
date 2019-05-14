@@ -473,3 +473,155 @@ class BoxModelTriples(Module):
             "three_boxes_mask": three_boxes_mask,
             "two_vol": two_vol,
         }
+
+
+class BoxModelJointStable(Module):
+    def __init__(self, BoxParamType: type, log_vol_func: Callable,
+                 num_models: int, num_boxes: int, dims: int,
+                 init_min_vol: float = default_init_min_vol,
+                 universe_box: Optional[Callable] = None, **kwargs):
+        super().__init__()
+        self.box_embedding = BoxParamType(num_models, num_boxes, dims, init_min_vol, **kwargs)
+        self.log_vol_func = log_vol_func
+
+        if universe_box is None:
+            z = torch.zeros(dims)
+            Z = torch.ones(dims)
+            self.universe_box = lambda _: torch.stack((z,Z))[None, None]
+            self.log_universe_vol = lambda _: self.log_vol_func(self.universe_box(None)).squeeze()
+            self.clamp = True
+        else:
+            self.universe_box = universe_box
+            self.log_universe_vol = lambda b: self.log_vol_func(self.universe_box(b))
+            self.clamp = False
+
+        self.weights = LogWeightedSum(num_models)
+
+    def forward(self, box_indices: Tensor) -> Dict:
+        # Unary
+        box_embeddings_orig = self.box_embedding()
+        if self.clamp:
+            box_embeddings = box_embeddings_orig.clamp(0,1)
+        else:
+            box_embeddings = box_embeddings_orig
+
+        log_universe_vol = self.log_universe_vol(box_embeddings)
+
+        log_unary_probs = self.weights(self.log_vol_func(box_embeddings) -  log_universe_vol)
+
+        log_P_A = log_unary_probs[box_indices[:,0]]
+        log_P_B = log_unary_probs[box_indices[:,1]]
+        A = box_embeddings[:, box_indices[:,0]]
+        B = box_embeddings[:, box_indices[:,1]]
+        log_P_A_B = self.weights(self.log_vol_func(intersection(A, B)) - log_universe_vol)
+
+        return {
+            "log_P_A": log_P_A,
+            "log_P_B": log_P_B,
+            "log_P_A_B": log_P_A_B,
+        }
+
+class BoxModelJoint(Module):
+    def __init__(self, BoxParamType: type, vol_func: Callable,
+                 num_models:int, num_boxes:int, dims:int,
+                 init_min_vol: float = default_init_min_vol, universe_box: Optional[Callable] = None, **kwargs):
+        super().__init__()
+        self.box_embedding = BoxParamType(num_models, num_boxes, dims, init_min_vol, **kwargs)
+        self.vol_func = vol_func
+
+        if universe_box is None:
+            z = torch.zeros(dims)
+            Z = torch.ones(dims)
+            self.universe_box = lambda _: torch.stack((z,Z))[None, None]
+            self.universe_vol = lambda _: self.vol_func(self.universe_box(None)).squeeze()
+            self.clamp = True
+        else:
+            self.universe_box = universe_box
+            self.universe_vol = lambda b: self.vol_func(self.universe_box(b))
+            self.clamp = False
+
+        self.weights = WeightedSum(num_models)
+
+    def forward(self, box_indices: Tensor) -> Dict:
+        # Unary
+        box_embeddings_orig = self.box_embedding()
+        if self.clamp:
+            box_embeddings = box_embeddings_orig.clamp(0,1)
+        else:
+            box_embeddings = box_embeddings_orig
+
+        universe_vol = self.universe_vol(box_embeddings)
+
+        unary_probs = self.weights(self.vol_func(box_embeddings) / universe_vol)
+
+        P_A = unary_probs[box_indices[:,0]]
+        P_B = unary_probs[box_indices[:,1]]
+        A = box_embeddings[:, box_indices[:,0]]
+        B = box_embeddings[:, box_indices[:,1]]
+        P_A_B = self.weights(self.vol_func(intersection(A, B)) / universe_vol)
+
+        return {
+            "P_A": P_A,
+            "P_B": P_B,
+            "P_A_B": P_A_B,
+            "A": A,
+            "B": B,
+        }
+
+class BoxModelJointTriple(Module):
+    def __init__(self, BoxParamType: type, vol_func: Callable,
+                 num_models:int, num_boxes:int, dims:int,
+                 init_min_vol: float = default_init_min_vol, universe_box: Optional[Callable] = None, **kwargs):
+        super().__init__()
+        self.box_embedding = BoxParamType(num_models, num_boxes, dims, init_min_vol, **kwargs)
+        self.vol_func = vol_func
+
+        if universe_box is None:
+            z = torch.zeros(dims)
+            Z = torch.ones(dims)
+            self.universe_box = lambda _: torch.stack((z,Z))[None, None]
+            self.universe_vol = lambda _: self.vol_func(self.universe_box(None)).squeeze()
+            self.clamp = True
+        else:
+            self.universe_box = universe_box
+            self.universe_vol = lambda b: self.vol_func(self.universe_box(b))
+            self.clamp = False
+
+        self.weights = WeightedSum(num_models)
+
+    def forward(self, box_indices: Tensor) -> Dict:
+        # Unary
+        box_embeddings_orig = self.box_embedding()
+        if self.clamp:
+            box_embeddings = box_embeddings_orig.clamp(0,1)
+        else:
+            box_embeddings = box_embeddings_orig
+
+        universe_vol = self.universe_vol(box_embeddings)
+
+        unary_probs = self.weights(self.vol_func(box_embeddings) / universe_vol)
+
+        P_A = unary_probs[box_indices[:,0]]
+        P_B = unary_probs[box_indices[:,1]]
+        P_C = unary_probs[box_indices[:,2]]
+        A = box_embeddings[:, box_indices[:,0]]
+        B = box_embeddings[:, box_indices[:,1]]
+        C = box_embeddings[:, box_indices[:,2]]
+        P_A_B = self.weights(self.vol_func(intersection(A, B)) / universe_vol)
+        P_A_C = self.weights(self.vol_func(intersection(A, C)) / universe_vol)
+        P_B_C = self.weights(self.vol_func(intersection(B, C)) / universe_vol)
+
+        P_A_B_C = self.weights(self.vol_func(intersection(intersection(A,B), C)) / universe_vol)
+
+        return {
+            "P_A": P_A,
+            "P_B": P_B,
+            "P_C": P_C,
+            "P_A_B": P_A_B,
+            "P_A_C": P_A_C,
+            "P_B_C": P_B_C,
+            "P_A_B_C": P_A_B_C,
+            "A": A,
+            "B": B,
+            "C": C,
+        }
