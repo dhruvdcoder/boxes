@@ -18,14 +18,22 @@ def load_numpy_num_lines(path, num = "all", dtype=np.float):
 
 
 class Probs(TensorDataset):
-    """Pairwise Probability dataset"""
+    """Pairwise Probability dataset.
+    TensorDataset takes in a bunch of tensors and returns a tuple of elements by indexing into the
+    first dim of each of the supplied tensors.
+    See https://pytorch.org/docs/stable/_modules/torch/utils/data/dataset.html#TensorDataset
+    """
 
-    def __init__(self, ids, probs):
+    def __init__(self, ids: torch.Tensor, probs: torch.Tensor):
+        """Overridden to give names to the supplied tensors. TensorDataset stores them as
+        a list/tuple
+        """
         super().__init__(ids, probs)
         self.ids = ids
         self.probs = probs
 
-    def to(self, *args, **kwargs):
+    def to(self, *args, **kwargs) -> Probs:
+        """Propagates torch's to() inside the dataset""" 
         self.ids = self.ids.to(*args, **kwargs)
         self.probs = self.probs.to(*args, **kwargs)
         # Now we need to make sure the self.tensors attribute points to the right versions.
