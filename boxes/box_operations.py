@@ -1,5 +1,5 @@
 import torch
-from torch import Tensor # for type annotations
+from torch import Tensor  # for type annotations
 import torch.nn.functional as F
 from typing import *
 
@@ -10,8 +10,8 @@ def intersection(A: Tensor, B: Tensor) -> Tensor:
     :param B: Tensor(model, pair, zZ, dim)
     :return: Tensor(model, pair, zZ, dim), box embeddings for A intersect B
     """
-    z = torch.max(A[:,:,0], B[:,:,0])
-    Z = torch.min(A[:,:,1], B[:,:,1])
+    z = torch.max(A[:, :, 0], B[:, :, 0])
+    Z = torch.min(A[:, :, 1], B[:, :, 1])
     return torch.stack((z, Z), dim=2)
 
 
@@ -21,8 +21,8 @@ def join(A: Tensor, B: Tensor) -> Tensor:
     :param B: Tensor(model, pair, zZ, dim)
     :return: Tensor(model, pair, zZ, dim), box embeddings for the smallest box which contains A and B
     """
-    z = torch.min(A[:,:,0], B[:,:,0])
-    Z = torch.max(A[:,:,1], B[:,:,1])
+    z = torch.min(A[:, :, 0], B[:, :, 0])
+    Z = torch.max(A[:, :, 1], B[:, :, 1])
     return torch.stack((z, Z), dim=2)
 
 
@@ -31,7 +31,7 @@ def clamp_volume(boxes: Tensor) -> Tensor:
     :param boxes: Tensor(model, box, zZ, dim)
     :return: Tensor(model, box) of volumes
     """
-    return torch.prod((boxes[:,:,1] - boxes[:,:,0]).clamp_min(0), dim=-1)
+    return torch.prod((boxes[:, :, 1] - boxes[:, :, 0]).clamp_min(0), dim=-1)
 
 
 def soft_volume(boxes: Tensor) -> Tensor:
@@ -39,23 +39,28 @@ def soft_volume(boxes: Tensor) -> Tensor:
     :param sidelengths: Tensor(model, box, dim)
     :return: Tensor(model, box) of volumes
     """
-    return torch.prod(F.softplus(boxes[:,:,1] - boxes[:,:,0]), dim=-1)
+    return torch.prod(F.softplus(boxes[:, :, 1] - boxes[:, :, 0]), dim=-1)
 
 
-def log_clamp_volume(boxes: Tensor, eps:float = torch.finfo(torch.float32).tiny) -> Tensor:
+def log_clamp_volume(boxes: Tensor,
+                     eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
     """
     :param boxes: Tensor(model, box, zZ, dim)
     :return: Tensor(model, box) of volumes
     """
-    return torch.sum(torch.log((boxes[:,:,1] - boxes[:,:,0]).clamp_min(0) + eps), dim=-1)
+    return torch.sum(
+        torch.log((boxes[:, :, 1] - boxes[:, :, 0]).clamp_min(0) + eps),
+        dim=-1)
 
 
-def log_soft_volume(boxes: Tensor, eps:float = torch.finfo(torch.float32).tiny) -> Tensor:
+def log_soft_volume(boxes: Tensor,
+                    eps: float = torch.finfo(torch.float32).tiny) -> Tensor:
     """
     :param sidelengths: Tensor(model, box, dim)
     :return: Tensor(model, box) of volumes
     """
-    return torch.sum(torch.log(F.softplus(boxes[:,:,1] - boxes[:,:,0]) + eps), dim=-1)
+    return torch.sum(
+        torch.log(F.softplus(boxes[:, :, 1] - boxes[:, :, 0]) + eps), dim=-1)
 
 
 def smallest_containing_box(boxes: Tensor) -> Tensor:
@@ -65,11 +70,12 @@ def smallest_containing_box(boxes: Tensor) -> Tensor:
     :param boxes: Box embedding of shape (model, box, zZ, dim)
     :return: Tensor of shape (model, 1, zZ, dim)
     """
-    z = boxes[:,:,0]
-    Z = boxes[:,:,1]
+    z = boxes[:, :, 0]
+    Z = boxes[:, :, 1]
     min_z, _ = torch.min(z, dim=1, keepdim=True)
     max_Z, _ = torch.max(Z, dim=1, keepdim=True)
     return torch.stack((min_z, max_Z), dim=2)
+
 
 def smallest_containing_box_outside_unit_cube(boxes: Tensor) -> Tensor:
     """
@@ -78,8 +84,8 @@ def smallest_containing_box_outside_unit_cube(boxes: Tensor) -> Tensor:
     :param boxes: Box embedding of shape (model, box, zZ, dim)
     :return: Tensor of shape (model, 1, zZ, dim)
     """
-    z = boxes[:,:,0]
-    Z = boxes[:,:,1]
+    z = boxes[:, :, 0]
+    Z = boxes[:, :, 1]
     min_z, _ = torch.min(z, dim=1, keepdim=True)
     max_Z, _ = torch.max(Z, dim=1, keepdim=True)
     min_z = min_z.clamp_max(0)
@@ -87,7 +93,9 @@ def smallest_containing_box_outside_unit_cube(boxes: Tensor) -> Tensor:
     return torch.stack((min_z, max_Z), dim=2)
 
 
-def detect_small_boxes(boxes: Tensor, vol_func: Callable = clamp_volume, min_vol: float = 1e-20) -> Tensor:
+def detect_small_boxes(boxes: Tensor,
+                       vol_func: Callable = clamp_volume,
+                       min_vol: float = 1e-20) -> Tensor:
     """
     Returns the indices of boxes with volume smaller than eps.
 
@@ -99,7 +107,8 @@ def detect_small_boxes(boxes: Tensor, vol_func: Callable = clamp_volume, min_vol
     return vol_func(boxes) < min_vol
 
 
-def replace_Z_by_cube(boxes: Tensor, indices: Tensor, cube_vol: float = 1e-20) -> Tensor:
+def replace_Z_by_cube(boxes: Tensor, indices: Tensor,
+                      cube_vol: float = 1e-20) -> Tensor:
     """
     Returns a new Z parameter for boxes for which those boxes[indices] are now replaced by cubes of size cube_vol
 
@@ -108,11 +117,11 @@ def replace_Z_by_cube(boxes: Tensor, indices: Tensor, cube_vol: float = 1e-20) -
     :param cube_vol: volume of cube
     :return: tensor representing the Z parameter
     """
-    return boxes[:, :, 0][indices] + cube_vol ** (1 / boxes.shape[-1])
+    return boxes[:, :, 0][indices] + cube_vol**(1 / boxes.shape[-1])
 
 
-
-def replace_Z_by_cube_(boxes: Tensor, indices: Tensor, cube_vol: float = 1e-20) -> Tensor:
+def replace_Z_by_cube_(boxes: Tensor, indices: Tensor,
+                       cube_vol: float = 1e-20) -> Tensor:
     """
     Replaces the boxes indexed by `indices` by a cube of volume `min_vol` with the same z coordinate
 
@@ -129,7 +138,8 @@ def disjoint_boxes_mask(A: Tensor, B: Tensor) -> Tensor:
     Returns a mask for when A and B are disjoint.
     Note: This is symmetric with respect to the arguments.
     """
-    return ((B[:,:,1] <= A[:,:,0]) | (B[:,:,0] >= A[:,:,1])).any(dim=-1)
+    return ((B[:, :, 1] <= A[:, :, 0]) |
+            (B[:, :, 0] >= A[:, :, 1])).any(dim=-1)
 
 
 def overlapping_boxes_mask(A: Tensor, B: Tensor) -> Tensor:
@@ -141,12 +151,15 @@ def containing_boxes_mask(A: Tensor, B: Tensor) -> Tensor:
     Returns a mask for when B contains A.
     Note: This is *not* symmetric with respect to it's arguments!
     """
-    return ((B[:,:,1] >= A[:,:,1]) & (B[:,:,0] <= A[:,:,0])).all(dim=-1)
+    return ((B[:, :, 1] >= A[:, :, 1]) &
+            (B[:, :, 0] <= A[:, :, 0])).all(dim=-1)
 
 
-def needing_pull_mask(A: Tensor, B: Tensor, target_prob_B_given_A: Tensor) -> Tensor:
+def needing_pull_mask(A: Tensor, B: Tensor,
+                      target_prob_B_given_A: Tensor) -> Tensor:
     return (target_prob_B_given_A != 0) & disjoint_boxes_mask(A, B)
 
 
-def needing_push_mask(A: Tensor, B: Tensor, target_prob_B_given_A: Tensor) -> Tensor:
+def needing_push_mask(A: Tensor, B: Tensor,
+                      target_prob_B_given_A: Tensor) -> Tensor:
     return (target_prob_B_given_A != 1) & containing_boxes_mask(A, B)
