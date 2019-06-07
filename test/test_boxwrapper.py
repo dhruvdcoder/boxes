@@ -1,4 +1,4 @@
-from boxes.box_tensors import *
+from boxes.box_wrapper import *
 import torch
 import logging
 import numpy as np
@@ -12,17 +12,15 @@ def test_simple_creation():
     box_tensor = BoxTensor(tensor)
     assert (tensor.data.numpy() == box_tensor.data.numpy()).all()
     assert isinstance(box_tensor, BoxTensor)
-    assert isinstance(box_tensor, torch.Tensor)
     tensor = torch.tensor(np.random.rand(2, 10))
     box_tensor = BoxTensor(tensor)
     assert (tensor.data.numpy() == box_tensor.data.numpy()).all()
     assert isinstance(box_tensor, BoxTensor)
-    assert isinstance(box_tensor, torch.Tensor)
     tensor = torch.tensor(np.random.rand(10, 2, 3, 2, 10))
-    box_tensor = BoxTensor(tensor)
+    box_tensor = SigmoidBoxTensor(tensor)
     assert (tensor.data.numpy() == box_tensor.data.numpy()).all()
     assert isinstance(box_tensor, BoxTensor)
-    assert isinstance(box_tensor, torch.Tensor)
+    assert isinstance(box_tensor, SigmoidBoxTensor)
 
 
 def test_no_copy_during_creation():
@@ -33,7 +31,7 @@ def test_no_copy_during_creation():
 
     tensor = torch.tensor(np.random.rand(3, 2, 3))
     box_tensor = BoxTensor(tensor)
-    box_tensor[0][0][0] = 1.
+    box_tensor.data[0][0][0] = 1.
     assert (tensor.data.numpy() == box_tensor.data.numpy()).all()
 
 
@@ -54,7 +52,7 @@ def test_creation_from_zZ():
     z = torch.tensor(np.random.rand(*shape))
     Z = torch.tensor(np.random.rand(*shape))
     box = BoxTensor.from_zZ(z, Z)
-    assert box.shape == (3, 1, 2, 5)
+    assert box.data.shape == (3, 1, 2, 5)
 
 
 def test_copying_during_creation_from_zZ():
@@ -77,55 +75,39 @@ def test_validation_during_creation_from_zZ():
 
 
 def test_intersection():
-    box1 = BoxTensor(
-        torch.tensor([[[1, 1], [3, 5]], [[1, 1], [2, 3]]]),
-        requires_grad=False)
-    box2 = BoxTensor(
-        torch.tensor([[[2, 0], [6, 2]], [[3, 2], [4, 4]]]),
-        requires_grad=False)
-    res = BoxTensor(
-        torch.tensor([[[2, 1], [3, 2]], [[3, 2], [2, 3]]]),
-        requires_grad=False)
+    box1 = BoxTensor(torch.tensor([[[1, 1], [3, 5]], [[1, 1], [2, 3]]]))
+    box2 = BoxTensor(torch.tensor([[[2, 0], [6, 2]], [[3, 2], [4, 4]]]))
+    res = BoxTensor(torch.tensor([[[2, 1], [3, 2]], [[3, 2], [2, 3]]]))
     assert (res.data.numpy() == box1.intersection(box2).data.numpy()).all()
 
 
 def test_join():
-    box1 = BoxTensor(
-        torch.tensor([[[1, 1], [3, 5]], [[1, 1], [2, 3]]]),
-        requires_grad=False)
-    box2 = BoxTensor(
-        torch.tensor([[[2, 0], [6, 2]], [[3, 2], [4, 4]]]),
-        requires_grad=False)
-    res = BoxTensor(
-        torch.tensor([[[1, 0], [6, 5]], [[1, 1], [4, 4]]]),
-        requires_grad=False)
+    box1 = BoxTensor(torch.tensor([[[1, 1], [3, 5]], [[1, 1], [2, 3]]]))
+    box2 = BoxTensor(torch.tensor([[[2, 0], [6, 2]], [[3, 2], [4, 4]]]))
+    res = BoxTensor(torch.tensor([[[1, 0], [6, 5]], [[1, 1], [4, 4]]]))
     assert (res.data.numpy() == box1.join(box2).data.numpy()).all()
 
 
 def test_clamp_vol():
-    box1 = BoxTensor(
-        torch.tensor([[[1, 1], [3, 5]], [[1, 1], [2, 3]]]),
-        requires_grad=False)
+    box1 = BoxTensor(torch.tensor([[[1, 1], [3, 5]], [[1, 1], [2, 3]]]))
     vol = torch.tensor([8, 2])
     assert (box1.clamp_volume().data.numpy() == vol.data.numpy()).all()
     # with flipped box
-    box1 = BoxTensor(
-        torch.tensor([[[1, 1], [3, 5]], [[2, 3], [1, 1]]]),
-        requires_grad=False)
+    box1 = BoxTensor(torch.tensor([[[1, 1], [3, 5]], [[2, 3], [1, 1]]]))
     vol = torch.tensor([8, 0])
     assert (box1.clamp_volume().data.numpy() == vol.data.numpy()).all()
 
 
 def test_log_clamp_vol():
     box1 = BoxTensor(
-        torch.tensor([[[1, 1], [3, 5]], [[1, 1], [2, 3]]]),
-        requires_grad=False).to(dtype=torch.float)
+        torch.tensor([[[1, 1], [3, 5]], [[1, 1], [2,
+                                                  3]]]).to(dtype=torch.float))
     vol = torch.log(torch.tensor([8, 2]).to(dtype=torch.float))
     assert np.allclose(box1.log_clamp_volume().data.numpy(), vol.data.numpy())
     # with flipped box
     box1 = BoxTensor(
-        torch.tensor([[[1, 1], [3, 5]], [[2, 3], [1, 1]]]),
-        requires_grad=False).to(dtype=torch.float)
+        torch.tensor([[[1, 1], [3, 5]], [[2, 3], [1,
+                                                  1]]]).to(dtype=torch.float))
     vol = torch.log(torch.tensor([8, 0 + torch.finfo(torch.float).tiny]))
     vol[1] = vol[1] * (2
                        )  # need this because in sum(log()) eps is added twice,
@@ -136,7 +118,7 @@ def test_log_clamp_vol():
 def test_simple_grad():
     class Identity(torch.nn.Module):
         def forward(self, inp):
-            return SigmoidBoxTensor(inp)
+            return SigmoidBoxTensor(inp).data
 
     layer = Identity()
     batch_size = 5
@@ -154,7 +136,7 @@ def test_from_zZ_grad():
     class Identity(torch.nn.Module):
         def forward(self, inp):
             z, Z = inp
-            return SigmoidBoxTensor.from_zZ(z, Z)
+            return SigmoidBoxTensor.from_zZ(z, Z).data
 
     layer = Identity()
     batch_size = 5
@@ -179,7 +161,7 @@ def test_from_split_grad():
 
         def forward(self, inp):
             inp = inp * self.p
-            res = SigmoidBoxTensor.from_split(inp, -1)
+            res = SigmoidBoxTensor.from_split(inp, -1).data
             return res
 
     layer = Identity()
@@ -192,24 +174,3 @@ def test_from_split_grad():
         inp = torch.tensor(
             np.random.rand(*inp_shape), requires_grad=True).double()
         torch.autograd.gradcheck(layer, inp)
-
-
-if __name__ == '__main__':
-
-    class Identity(torch.nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.p = torch.nn.Parameter(torch.tensor(.2))
-
-        def forward(self, inp):
-            inp = inp * self.p
-            res = SigmoidBoxTensor.from_split(inp, -1)
-            return res
-
-    layer = Identity()
-    batch_size = 5
-    seq_len = 3
-    inp_dim = 10
-    inp_shape = (batch_size, seq_len, inp_dim)
-    inp = torch.tensor(np.random.rand(*inp_shape), requires_grad=True).double()
-    res = layer(inp)

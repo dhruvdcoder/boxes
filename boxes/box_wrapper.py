@@ -22,27 +22,21 @@ def _shape_error_str(tensor_name, expected_shape, actual_shape):
 # see: https://realpython.com/python-type-checking/#type-hints-for-methods
 # to know why we need to use TypeVar
 TBoxTensor = TypeVar("TBoxTensor", bound="BoxTensor")
-TTensor = TypeVar("TTensor", bound="Tensor")
 
 
-class BoxTensor(Tensor):
-    """ Subclass of :class:`Tensor` which has come extra
-    box specific methods. It acts as a wrapper to tensor containing
-    a collection of boxes or a single box.
+class BoxTensor(object):
+    """ A wrapper to which contains single tensor which 
+    represents single or multiple boxes. 
+
+    Have to use composition instead of inheritance because
+    it is not safe to interit from :class:`torch.Tensor` because
+    creating an instance of such a class will always make it a leaf node.
+    This works for :class:`torch.nn.Parameter` but won't work for a general
+    box_tensor.
     """
 
-    def __new__(cls: Type[TBoxTensor],
-                data: Optional[Tensor] = None,
-                requires_grad: bool = False,
-                **kwargs: Any) -> TBoxTensor:
+    def __init__(self, data: Tensor) -> None:
         """
-        Need to implement new as :class:`torch.Tensor` is a wrapper
-        around C.
-
-        Unlike :class:`torch.Tensor`, BoxTensor can take all the arguments
-        supported by :func:`torch.tensor` -- dtype=None, device=None, 
-        requires_grad=False -- and produce a BoxTensor instance.
-
         .. todo:: Validate the values of z, Z ? z < Z
 
         Arguments:
@@ -50,51 +44,26 @@ class BoxTensor(Tensor):
             data: Tensor of shape (**, zZ, num_dims). Here, zZ=2, where
                 the 0th dim is for bottom left corner and 1st dim is for
                 top right corner of the box
-
-            requires_grad: 
         """
-        if data is not None:
-            if isinstance(data, cls):
-                print("Is instance")
-                raise ValueError("Cannot create subclass of BoxTensor by "
-                                 "passing an instance of BoxTensor as data")
-            requires_grad = (requires_grad or data.requires_grad)
-            if _box_shape_ok(data):
-                val = data
-            else:
-                raise ValueError(
-                    _shape_error_str('data', '(**,2,num_dims)', data.shape))
+        if _box_shape_ok(data):
+            self.data = data
         else:
-            val = torch.Tensor()
-        # use 'to()' to set params if specified
-        val = val.to(device=kwargs.get('device'), dtype=kwargs.get('dtype'))
-
-        return val  # type:ignore
+            raise ValueError(
+                _shape_error_str('data', '(**,2,num_dims)', data.shape))
+        super().__init__()
 
     def __repr__(self):
-        return 'box_' + super().__repr__()
-
-    def to(self: TBoxTensor, *args, **kwargs) -> TBoxTensor:
-        """ Need to subclass because torch.Tensor.to()
-        returns torch.Tensor and not the subclass"""
-        res = super().to(*args, **kwargs)
-        return self.__class__(res, requires_grad=self.requires_grad)
-
-    def clone(self: TBoxTensor) -> TBoxTensor:
-        """ Need to subclass because torch.Tensor.to()
-        returns torch.Tensor and not the subclass"""
-        res = super().clone()
-        return self.__class__(res, requires_grad=res.requires_grad)
+        return 'box_tensor_wrapper(' + self.data.__repr__() + ')'
 
     @property
     def z(self) -> Tensor:
         """Lower left coordinate as Tensor"""
-        return self[..., 0, :]
+        return self.data[..., 0, :]
 
     @property
     def Z(self) -> Tensor:
         """Top right coordinate as Tensor"""
-        return self[..., 1, :]
+        return self.data[..., 1, :]
 
     @classmethod
     def from_zZ(cls: Type[TBoxTensor], z: Tensor, Z: Tensor) -> TBoxTensor:
@@ -107,8 +76,8 @@ class BoxTensor(Tensor):
             raise ValueError(
                 "Shape of z and Z should be same but is {} and {}".format(
                     z.shape, Z.shape))
-        box_val = torch.stack((z, Z), -2)
-        return cls(box_val, requires_grad=(z.requires_grad or Z.requires_grad))
+        box_val: Tensor = torch.stack((z, Z), -2)
+        return cls(box_val)
 
     @classmethod
     def from_split(cls: Type[TBoxTensor], t: Tensor,
@@ -157,7 +126,7 @@ class BoxTensor(Tensor):
         BoxTensor is (3,4,2,5), then shape of indice should be (*,*)
             
         """
-        return self.__class__(self.index_select(dim, indices))
+        return self.__class__(self.data.index_select(dim, indices))
 
     def clamp_volume(self) -> Tensor:
         """Volume of boxes. Returns 0 where boxes are flipped.
@@ -178,12 +147,12 @@ class BoxTensor(Tensor):
         return torch.prod(F.softplus(self.Z - self.z, beta=temp), dim=-1)
 
     def log_clamp_volume(self) -> Tensor:
-        eps = torch.finfo(self.dtype).tiny  # type: ignore
+        eps = torch.finfo(self.data.dtype).tiny  # type: ignore
         res = torch.sum(torch.log((self.Z - self.z).clamp_min(eps)), dim=-1)
         return res
 
     def log_soft_volume(self, temp: float = 1.) -> Tensor:
-        eps = torch.finfo(self.dtype).tiny  # type: ignore
+        eps = torch.finfo(self.data.dtype).tiny  # type: ignore
         res = torch.sum(
             torch.log(F.softplus(self.Z - self.z, beta=temp).clamp_min(eps)),
             dim=-1)
@@ -192,7 +161,7 @@ class BoxTensor(Tensor):
     @classmethod
     def cat(cls: Type[TBoxTensor],
             tensors: Tuple[TBoxTensor, ...]) -> TBoxTensor:
-        return cls(torch.cat(tensors, -1))
+        return cls(torch.cat(tuple(map(lambda x: x.data, tensors)), -1))
 
 
 class SigmoidBoxTensor(BoxTensor):
@@ -209,5 +178,5 @@ class SigmoidBoxTensor(BoxTensor):
     @property
     def Z(self) -> Tensor:
         z = self.z
-        Z = z + torch.sigmoid(self[..., 1, :]) * (1 - z)  # type: ignore
+        Z = z + torch.sigmoid(self.data[..., 1, :]) * (1 - z)  # type: ignore
         return Z
