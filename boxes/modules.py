@@ -3,8 +3,9 @@ import torch
 from torch import Tensor
 from torch.nn import Module, Parameter
 import torch.nn.functional as F
-from .box_wrapper import SigmoidBoxTensor, BoxTensor
+from .box_wrapper import SigmoidBoxTensor, BoxTensor, TBoxTensor
 from typing import List, Tuple, Dict, Optional, Any, Union, TypeVar, Type
+from allennlp.modules.seq2vec_encoders import pytorch_seq2vec_wrapper
 ################################################
 # Box Parametrization Layers
 ################################################
@@ -727,75 +728,194 @@ class BoxModelJointTriple(Module):
 
 
 TTensor = TypeVar("TTensor", bound="torch.Tensor")
-TBoxTensor = TypeVar("TBoxTensor", bound="BoxTensor")
+
+#TBoxTensor = TypeVar("TBoxTensor", bound="BoxTensor")
 
 
 class BoxView(torch.nn.Module):
     """Presents input as boxes"""
-    boxes: Dict[str, Type[TBoxTensor]] = {  # type: ignore
+    box_types: Dict[str, Type[TBoxTensor]] = {  # type: ignore
         'SigmoidBoxes': SigmoidBoxTensor
     }
 
-    def __init__(self, box_type, split_dim):
+    def __init__(self, box_type: str, split_dim: int = -1):
         self.box_type = box_type
         self.split_dim = split_dim
+        super().__init__()
 
-    def forward(self, inp):
-        res = self.box_type.from_split(inp, self.split_dim)
+    def forward(self, inp: torch.Tensor) -> TBoxTensor:
+        res = self.box_types[self.box_type].from_split(inp, self.split_dim)
         return res
 
 
-class LSTMSigmoidBox(torch.nn.Module):
+@torch.no_grad()
+def mask_from_lens(lens: List[int],
+                   t: Optional[torch.Tensor] = None,
+                   value: Union[int, float, torch.Tensor] = 1.):
+    if t is None:
+        t = torch.zeros(len(lens), max(lens))
+    if t.size(0) != len(lens):
+        raise ValueError(
+            "t.size(0) should be equal to len(lens) but are {} and {}".format(
+                t.size(0), len(lens)))
+    for i, l in enumerate(lens):
+        t[i][list(range(l))] = value
+    return t
+
+
+class LSTMBox(torch.nn.LSTM):
     """Module with standard lstm at the bottom but Boxes at the output"""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, box_type='SigmoidBoxes', **kwargs):
         # make sure that number of hidden dim is even
         #hidden_dim = args[1] * 2 if kwargs.get(
         #'bidirectional', default=False) else args[1]
+        self.box_type = box_type
         hidden_dim = args[1]
         if hidden_dim % 2 != 0:
             raise ValueError(
                 "hidden_dim  has to be even but is {}".format(hidden_dim))
-        super().__init__()
-        self.lstm = torch.nn.LSTM(*args, **kwargs)
+        super().__init__(*args, **kwargs)
+        self.boxes = BoxView(box_type, split_dim=-1)
 
-    def forward(
-            self,
-            inp: torch.Tensor,
-            hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None) -> Tensor:
+    def forward(self,
+                inp: torch.Tensor,
+                hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
+                ) -> Tuple[TBoxTensor, Tuple[Tensor, Tensor]]:
         # get lstm's output
-        output, (h_n, c_n) = self.lstm(inp, hx=hx)
+        output, (h_n, c_n) = super().forward(inp, hx=hx)
         packed_inp = False
 
         # check if packed. If so, unpack
         if isinstance(output, torch.nn.utils.rnn.PackedSequence):
             packed_inp = True
             output, seq_lens = torch.nn.utils.rnn.pad_packed_sequence(
-                output, batch_first=self.lstm.batch_first)
+                output, batch_first=self.batch_first)
         # when LSTM is bidirectional, the output of both directions is used in
         # z as well as Z. Hence, output of both directions is split
-        if self.lstm.bidirectional:
+        if self.bidirectional:
 
-            if self.lstm.batch_first:
+            if self.batch_first:
                 seq_len = output.size(1)
                 batch = output.size(0)
-                split_on_dir = output.view(batch, seq_len, 2,
-                                           self.lstm.hidden_size)
+                split_on_dir = output.view(batch, seq_len, 2, self.hidden_size)
                 output_dir1 = split_on_dir[..., 0, :]
                 output_dir2 = split_on_dir[..., 1, :]
             else:  # self.batch_first == False:
                 seq_len = output.size(0)
                 batch = output.size(1)
-                split_on_dir = output.view(seq_len, batch, 2,
-                                           self.lstm.hidden_size)
+                split_on_dir = output.view(seq_len, batch, 2, self.hidden_size)
                 output_dir1 = split_on_dir[..., 0, :]
                 output_dir2 = split_on_dir[..., 1, :]
 
-            boxes_dir1 = SigmoidBoxTensor.from_split(output_dir1, -1)
-            boxes_dir2 = SigmoidBoxTensor.from_split(output_dir2, -1)
-            box_output = SigmoidBoxTensor.cat((boxes_dir1, boxes_dir2))
+            boxes_dir1 = self.boxes(output_dir1)
+            boxes_dir2 = self.boxes(output_dir2)
+            box_output = self.boxes.box_types[self.box_type].cat((boxes_dir1,
+                                                                  boxes_dir2))
 
         else:
-            box_output = SigmoidBoxTensor.from_split(output, -1)
+            box_output = self.boxes(output)
+
+        return box_output.data, (h_n, c_n)
+
+
+class PytorchSeq2BoxWrapper(pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper):
+    """AllenNLP compatible seq to box module"""
+
+    def __init__(self,
+                 module: torch.nn.modules.RNNBase,
+                 box_type='SigmoidBoxes') -> None:
+        if module.hidden_size % 2 != 0:
+            raise ValueError(
+                "module.hidden_size  has to be even but is {}".format(
+                    module.hidden_size))
+        if not module.batch_first:
+            raise ValueError("module.batch_first should be True")
+        super().__init__(module)
+        self.box_type = box_type
+        self.boxes = BoxView(box_type, split_dim=-1)
+
+    def get_output_dim(self) -> int:
+        return int(super().get_output_dim() / 2)
+
+    def forward(self,
+                inp: torch.Tensor,
+                mask: Optional[torch.Tensor] = None,
+                hidden_state: Optional[torch.Tensor] = None) -> torch.Tensor:
+        output = super().forward(
+            inp, mask, hidden_state)  # shape = (batch, hidden_size*num_dir)
+
+        # when LSTM is bidirectional, the output of both directions is used in
+        # z as well as Z. Hence, output of both directions is split
+        if self._module.bidirectional:
+
+            if self._module.batch_first:
+                batch = output.size(0)
+                split_on_dir = output.view(batch, 2, self._module.hidden_size)
+                output_dir1 = split_on_dir[..., 0, :]
+                output_dir2 = split_on_dir[..., 1, :]
+
+            boxes_dir1 = self.boxes(output_dir1)
+            boxes_dir2 = self.boxes(output_dir2)
+            box_output = self.boxes.box_types[self.box_type].cat((boxes_dir1,
+                                                                  boxes_dir2))
+        else:
+            box_output = self.boxes(output)
 
         return box_output.data
+
+
+#class LSTMSigmoidBox(torch.nn.Module):
+#    """Module with standard lstm at the bottom but Boxes at the output"""
+#
+#    def __init__(self, *args, **kwargs):
+#        # make sure that number of hidden dim is even
+#        #hidden_dim = args[1] * 2 if kwargs.get(
+#        #'bidirectional', default=False) else args[1]
+#        hidden_dim = args[1]
+#        if hidden_dim % 2 != 0:
+#            raise ValueError(
+#                "hidden_dim  has to be even but is {}".format(hidden_dim))
+#        super().__init__()
+#        self.lstm = torch.nn.LSTM(*args, **kwargs)
+#
+#    def forward(
+#            self,
+#            inp: torch.Tensor,
+#            hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None) -> Tensor:
+#        # get lstm's output
+#        output, (h_n, c_n) = self.lstm(inp, hx=hx)
+#        packed_inp = False
+#
+#        # check if packed. If so, unpack
+#        if isinstance(output, torch.nn.utils.rnn.PackedSequence):
+#            packed_inp = True
+#            output, seq_lens = torch.nn.utils.rnn.pad_packed_sequence(
+#                output, batch_first=self.lstm.batch_first)
+#        # when LSTM is bidirectional, the output of both directions is used in
+#        # z as well as Z. Hence, output of both directions is split
+#        if self.lstm.bidirectional:
+#
+#            if self.lstm.batch_first:
+#                seq_len = output.size(1)
+#                batch = output.size(0)
+#                split_on_dir = output.view(batch, seq_len, 2,
+#                                           self.lstm.hidden_size)
+#                output_dir1 = split_on_dir[..., 0, :]
+#                output_dir2 = split_on_dir[..., 1, :]
+#            else:  # self.batch_first == False:
+#                seq_len = output.size(0)
+#                batch = output.size(1)
+#                split_on_dir = output.view(seq_len, batch, 2,
+#                                           self.lstm.hidden_size)
+#                output_dir1 = split_on_dir[..., 0, :]
+#                output_dir2 = split_on_dir[..., 1, :]
+#
+#            boxes_dir1 = SigmoidBoxTensor.from_split(output_dir1, -1)
+#            boxes_dir2 = SigmoidBoxTensor.from_split(output_dir2, -1)
+#            box_output = SigmoidBoxTensor.cat((boxes_dir1, boxes_dir2))
+#
+#        else:
+#            box_output = SigmoidBoxTensor.from_split(output, -1)
+#
+#        return box_output.data
