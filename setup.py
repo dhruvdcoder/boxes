@@ -12,7 +12,6 @@ setup(
     name='boxes',
     version='0.0.1',
     description='PyTorch Boxes',
-    package_dir={'': 'boxes'},
     packages=find_packages(
         'boxes', exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
     package_data={'boxes': ['py.typed']},
