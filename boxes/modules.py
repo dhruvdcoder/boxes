@@ -841,7 +841,7 @@ class PytorchSeq2BoxWrapper(pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper):
     def forward(self,
                 inp: torch.Tensor,
                 mask: Optional[torch.Tensor] = None,
-                hidden_state: Optional[torch.Tensor] = None) -> torch.Tensor:
+                hidden_state: Optional[torch.Tensor] = None) -> TBoxTensor:
         output = super().forward(
             inp, mask, hidden_state)  # shape = (batch, hidden_size*num_dir)
 
@@ -857,12 +857,12 @@ class PytorchSeq2BoxWrapper(pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper):
 
             boxes_dir1 = self.boxes(output_dir1)
             boxes_dir2 = self.boxes(output_dir2)
-            box_output = self.boxes.box_types[self.box_type].cat((boxes_dir1,
-                                                                  boxes_dir2))
+            box_output = (self.boxes.box_types[self.box_type]).cat(
+                (boxes_dir1, boxes_dir2))
         else:
             box_output = self.boxes(output)
 
-        return box_output.data
+        return box_output
 
 
 #class LSTMSigmoidBox(torch.nn.Module):

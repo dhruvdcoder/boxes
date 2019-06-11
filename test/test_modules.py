@@ -121,8 +121,8 @@ def test_simple_forward_pass_seq2box():
             list(range(int(hidden_dim / 2), hidden_dim)),
             dtype=torch.int64))[:, -1, ...]
     boxes2 = SigmoidBoxTensor.from_zZ(z, Z).data
-    assert boxes.shape == boxes2.shape
-    assert np.allclose(boxes.data.numpy(), boxes2.data.numpy())
+    assert boxes.data.shape == boxes2.shape
+    assert np.allclose(boxes.data.data.numpy(), boxes2.data.numpy())
 
 
 def test_simple_forward_pass_errors_seq2box():
@@ -147,7 +147,7 @@ def test_simple_forward_pass_bidirectional_seq2box():
     lstm = torch.nn.LSTM(
         inp_dim, hidden_dim, batch_first=True, bidirectional=True)
     boxes_layer = PytorchSeq2BoxWrapper(lstm)
-    boxes = boxes_layer(inp)
+    boxes = boxes_layer(inp).data
 
 
 def test_masked_forward_pass_seq2box():
@@ -162,7 +162,7 @@ def test_masked_forward_pass_seq2box():
     lstm = torch.nn.LSTM(inp_dim, hidden_dim, batch_first=True)
     boxes_layer = PytorchSeq2BoxWrapper(lstm)
     mask = mask_from_lens(seq_lens.detach().tolist())
-    boxes = boxes_layer(inp, mask)
+    boxes = boxes_layer(inp, mask).data
 
 
 #def test_simple_grad_seq2box():
