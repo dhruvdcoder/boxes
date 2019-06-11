@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 from pathlib import Path
 
 requirements_file = Path('requirements.txt')
@@ -12,7 +12,9 @@ setup(
     name='boxes',
     version='0.0.1',
     description='PyTorch Boxes',
-    packages=['boxes'],
+    package_dir={'': 'boxes'},
+    packages=find_packages(
+        'boxes', exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
     package_data={'boxes': ['py.typed']},
     install_requires=install_requires,
     zip_safe=False)
