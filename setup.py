@@ -1,8 +1,18 @@
 from setuptools import setup
+from pathlib import Path
 
-setup(name='boxes',
-      version='0.1',
-      description='PyTorch Boxes',
-      packages=['boxes'],
-      package_data={'boxes': ['py.typed']},
-      zip_safe=False)
+requirements_file = Path('requirements.txt')
+
+if (not requirements_file.exists()) or (not requirements_file.is_file()):
+    raise Exception("No requirements.txt found")
+with open(requirements_file) as f:
+    install_requires = list(f.read().splitlines())
+
+setup(
+    name='boxes',
+    version='0.0.1',
+    description='PyTorch Boxes',
+    packages=['boxes'],
+    package_data={'boxes': ['py.typed']},
+    install_requires=install_requires,
+    zip_safe=False)
