@@ -4,7 +4,8 @@ from torch import Tensor
 from torch.nn import Module, Parameter
 import torch.nn.functional as F
 from .box_wrapper import SigmoidBoxTensor, BoxTensor, TBoxTensor
-from typing import List, Tuple, Dict, Optional, Any, Union, TypeVar, Type
+from typing import (List, Tuple, Dict, Optional, Any, Union, TypeVar, Type,
+                    Callable)
 from allennlp.modules.seq2vec_encoders import pytorch_seq2vec_wrapper
 ################################################
 # Box Parametrization Layers
@@ -841,7 +842,7 @@ class PytorchSeq2BoxWrapper(pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper):
     def forward(self,
                 inp: torch.Tensor,
                 mask: Optional[torch.Tensor] = None,
-                hidden_state: Optional[torch.Tensor] = None) -> TBoxTensor:
+                hidden_state: Optional[torch.Tensor] = None) -> str:
         output = super().forward(
             inp, mask, hidden_state)  # shape = (batch, hidden_size*num_dir)
 
@@ -860,7 +861,7 @@ class PytorchSeq2BoxWrapper(pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper):
             box_output = (self.boxes.box_types[self.box_type]).cat(
                 (boxes_dir1, boxes_dir2))
         else:
-            box_output = self.boxes(output)
+            box_output: TBoxTensor = self.boxes(output)
 
         return box_output
 

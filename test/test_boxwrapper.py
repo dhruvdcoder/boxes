@@ -55,6 +55,20 @@ def test_creation_from_zZ():
     assert box.data.shape == (3, 1, 2, 5)
 
 
+def test_creation_from_zZ_sigmoid_box():
+    z1 = (torch.tensor([[1, 1], [1, 1]]).float()) / 6.
+    Z1 = (torch.tensor([[3, 5], [2, 3]]).float()) / 6.
+    box1 = SigmoidBoxTensor.from_zZ(z1, Z1)
+    z2 = (torch.tensor([[2, 0], [3, 2]]).float()) / 6.
+    Z2 = (torch.tensor([[6, 2], [4, 4]]).float()) / 6.
+    box2 = SigmoidBoxTensor.from_zZ(z2, Z2)
+
+    assert np.allclose(z1.data.numpy(), box1.z.data.numpy())
+    assert np.allclose(Z1.data.numpy(), box1.Z.data.numpy())
+    assert np.allclose(z2.data.numpy(), box2.z.data.numpy())
+    assert np.allclose(Z2.data.numpy(), box2.Z.data.numpy())
+
+
 def test_copying_during_creation_from_zZ():
     shape = (3, 1, 5)
     z = torch.tensor(np.random.rand(*shape))
@@ -79,6 +93,22 @@ def test_intersection():
     box2 = BoxTensor(torch.tensor([[[2, 0], [6, 2]], [[3, 2], [4, 4]]]))
     res = BoxTensor(torch.tensor([[[2, 1], [3, 2]], [[3, 2], [2, 3]]]))
     assert (res.data.numpy() == box1.intersection(box2).data.numpy()).all()
+
+
+def test_intersection_sigmoid_box():
+    z1 = (torch.tensor([[1, 1], [1, 1]]).float()) / 6.
+    Z1 = (torch.tensor([[3, 5], [2, 3]]).float()) / 6.
+    box1 = SigmoidBoxTensor.from_zZ(z1, Z1)
+    z2 = (torch.tensor([[2, 0], [3, 2]]).float()) / 6.
+    Z2 = (torch.tensor([[6, 2], [4, 4]]).float()) / 6.
+    box2 = SigmoidBoxTensor.from_zZ(z2, Z2)
+    resz = torch.tensor([[2, 1], [3, 2]]).float() / 6.
+    resZ = torch.tensor([[3, 2], [2, 3]]).float() / 6.
+    res = SigmoidBoxTensor.from_zZ(resz, resZ)
+    intersection = box1.intersection(box2)
+    assert np.allclose(res.data.numpy(), intersection.data.numpy())
+    assert np.allclose(res.z.data.numpy(), intersection.z.data.numpy())
+    assert np.allclose(res.Z.data.numpy(), intersection.Z.data.numpy())
 
 
 def test_join():
@@ -174,3 +204,7 @@ def test_from_split_grad():
         inp = torch.tensor(
             np.random.rand(*inp_shape), requires_grad=True).double()
         torch.autograd.gradcheck(layer, inp)
+
+
+if __name__ == '__main__':
+    test_creation_from_zZ_sigmoid_box()

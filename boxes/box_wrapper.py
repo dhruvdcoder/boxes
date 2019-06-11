@@ -189,16 +189,23 @@ class BoxTensor(object):
         return cls(torch.cat(tuple(map(lambda x: x.data, tensors)), -1))
 
 
+def inv_sigmoid(v: Tensor) -> Tensor:
+    return torch.log(v / (1 - v))  # type:ignore
+
+
 class SigmoidBoxTensor(BoxTensor):
     """Same as BoxTensor but with a different parameterization: (**,wW, num_dims)
 
     z = sigmoid(w)
     Z = z + sigmoid(W) * (1-z)
+
+    w = inv_sigmoid(z)
+    W = inv_sigmoid((Z - z)/(1-z))
     """
 
     @property
     def z(self) -> Tensor:
-        return super().z
+        return torch.sigmoid(self.data[..., 0, :])
 
     @property
     def Z(self) -> Tensor:
@@ -206,3 +213,18 @@ class SigmoidBoxTensor(BoxTensor):
         Z = z + torch.sigmoid(self.data[..., 1, :]) * (1 - z)  # type: ignore
 
         return Z
+
+    @classmethod
+    def from_zZ(cls: Type[TBoxTensor], z: Tensor, Z: Tensor) -> TBoxTensor:
+        if z.shape != Z.shape:
+            raise ValueError(
+                "Shape of z and Z should be same but is {} and {}".format(
+                    z.shape, Z.shape))
+        eps = torch.finfo(z.dtype).tiny  # type: ignore
+        w = inv_sigmoid(z.clamp(eps, 1. - eps))
+        W = inv_sigmoid(((Z - z) / (1 - z)).clamp(eps,
+                                                  1. - eps))  # type:ignore
+
+        box_val: Tensor = torch.stack((w, W), -2)
+
+        return cls(box_val)
