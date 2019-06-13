@@ -228,3 +228,39 @@ class SigmoidBoxTensor(BoxTensor):
         box_val: Tensor = torch.stack((w, W), -2)
 
         return cls(box_val)
+
+    @classmethod
+    def from_split(cls: Type[TBoxTensor], t: Tensor,
+                   dim: int = -1) -> TBoxTensor:
+        """Creates a BoxTensor by splitting on the dimension dim at midpoint
+
+        Args:
+            t: input
+            dim: dimension to split on
+
+        Returns:
+            BoxTensor: output BoxTensor
+
+        Raises:
+            ValueError: `dim` has to be even
+        """
+        len_dim = t.size(dim)
+
+        if len_dim % 2 != 0:
+            raise ValueError(
+                "dim has to be even to split on it but is {}".format(
+                    t.size(dim)))
+        split_point = int(len_dim / 2)
+        w = t.index_select(
+            dim,
+            torch.tensor(
+                list(range(split_point)), dtype=torch.int64, device=t.device))
+
+        W = t.index_select(
+            dim,
+            torch.tensor(
+                list(range(split_point, len_dim)),
+                dtype=torch.int64,
+                device=t.device))
+        box_val: Tensor = torch.stack((w, W), -2)
+        return cls(box_val)

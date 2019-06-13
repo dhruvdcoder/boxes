@@ -836,8 +836,17 @@ class PytorchSeq2BoxWrapper(pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper):
         self.box_type = box_type
         self.boxes = BoxView(box_type, split_dim=-1)
 
-    def get_output_dim(self) -> int:
-        return int(super().get_output_dim() / 2)
+    def get_output_dim(self, after_box: bool = False) -> int:
+        """
+
+        .. todo:: Logically correct output for get_output_dim when output is boxes
+        """
+        if after_box:
+            return int(super().get_output_dim() /
+                       2)  # this is still not right becuase
+        # for boxes, last two dims are their representation
+        else:
+            return super().get_output_dim()
 
     def forward(self,
                 inp: torch.Tensor,
