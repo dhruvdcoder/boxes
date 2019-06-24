@@ -120,14 +120,18 @@ class BoxTensor(object):
 
         return cls.from_zZ(z, Z)
 
+    def _intersection(self: TBoxTensor,
+                      other: TBoxTensor) -> Tuple[Tensor, Tensor]:
+        z = torch.max(self.z, other.z)
+        Z = torch.min(self.Z, other.Z)
+        return z, Z
+
     def intersection(self: TBoxTensor, other: TBoxTensor) -> TBoxTensor:
         """ Gives intersection of self and other.
 
         .. note:: This function can give fipped boxes, i.e. where z[i] > Z[i]
         """
-        z = torch.max(self.z, other.z)
-        Z = torch.min(self.Z, other.Z)
-
+        z, Z = self._intersection(other)
         return self.from_zZ(z, Z)
 
     def join(self: TBoxTensor, other: TBoxTensor) -> TBoxTensor:
@@ -159,6 +163,10 @@ class BoxTensor(object):
 
         return torch.prod((self.Z - self.z).clamp_min(0), dim=-1)
 
+    @classmethod
+    def _soft_volume(cls, z: Tensor, Z: Tensor, temp: float = 1.) -> Tensor:
+        return torch.prod(F.softplus(Z - z, beta=temp), dim=-1)
+
     def soft_volume(self, temp: float = 1.) -> Tensor:
         """Volume of boxes. Uses softplus instead of ReLU/clamp
 
@@ -166,7 +174,18 @@ class BoxTensor(object):
             Tensor of shape (**, ) when self has shape (**, 2, num_dims)
         """
 
-        return torch.prod(F.softplus(self.Z - self.z, beta=temp), dim=-1)
+        return self._soft_volume(self.z, self.Z, temp)
+
+    def intersection_soft_volume(self, other: TBoxTensor,
+                                 temp: float = 1.) -> Tensor:
+        """ Computes the soft volume of the intersection box
+
+        Return:
+            Tensor of shape(**,) when self and other have shape (**, 2, num_dims)
+        """
+        # intersection
+        z, Z = self._intersection(other)
+        return self._soft_volume(z, Z, temp)
 
     def log_clamp_volume(self) -> Tensor:
         eps = torch.finfo(self.data.dtype).tiny  # type: ignore
@@ -190,7 +209,7 @@ class BoxTensor(object):
 
 
 def inv_sigmoid(v: Tensor) -> Tensor:
-    return torch.log(v / (1 - v))  # type:ignore
+    return torch.log(v / (1. - v))  # type:ignore
 
 
 class SigmoidBoxTensor(BoxTensor):
@@ -210,7 +229,7 @@ class SigmoidBoxTensor(BoxTensor):
     @property
     def Z(self) -> Tensor:
         z = self.z
-        Z = z + torch.sigmoid(self.data[..., 1, :]) * (1 - z)  # type: ignore
+        Z = z + torch.sigmoid(self.data[..., 1, :]) * (1. - z)  # type: ignore
 
         return Z
 
@@ -222,8 +241,101 @@ class SigmoidBoxTensor(BoxTensor):
                     z.shape, Z.shape))
         eps = torch.finfo(z.dtype).tiny  # type: ignore
         w = inv_sigmoid(z.clamp(eps, 1. - eps))
-        W = inv_sigmoid(((Z - z) / (1 - z)).clamp(eps,
-                                                  1. - eps))  # type:ignore
+        W = inv_sigmoid(((Z - z) / (1. - z)).clamp(eps,
+                                                   1. - eps))  # type:ignore
+
+        box_val: Tensor = torch.stack((w, W), -2)
+
+        return cls(box_val)
+
+    @classmethod
+    def from_split(cls: Type[TBoxTensor], t: Tensor,
+                   dim: int = -1) -> TBoxTensor:
+        """Creates a BoxTensor by splitting on the dimension dim at midpoint
+
+        Args:
+            t: input
+            dim: dimension to split on
+
+        Returns:
+            BoxTensor: output BoxTensor
+
+        Raises:
+            ValueError: `dim` has to be even
+        """
+        len_dim = t.size(dim)
+
+        if len_dim % 2 != 0:
+            raise ValueError(
+                "dim has to be even to split on it but is {}".format(
+                    t.size(dim)))
+        split_point = int(len_dim / 2)
+        w = t.index_select(
+            dim,
+            torch.tensor(
+                list(range(split_point)), dtype=torch.int64, device=t.device))
+
+        W = t.index_select(
+            dim,
+            torch.tensor(
+                list(range(split_point, len_dim)),
+                dtype=torch.int64,
+                device=t.device))
+        box_val: Tensor = torch.stack((w, W), -2)
+        return cls(box_val)
+
+
+class TanhActivatedBoxTensor(BoxTensor):
+    """Same as BoxTensor but with a parameterization which is assumed to be the output
+    from an activation function.
+
+    Supported activations:
+
+        1. tanh
+    
+    let (*, num_dims) be the shape of output of the activations, then the BoxTensor is
+    created with shape (*, zZ, num_dims/2)
+
+    For tanh:
+
+    z = (w + 1)/2
+    
+    Z = z + ((W + 1)/2) * (1-z) => Z = (1- (W+1)/2)z + (W+1)/2 = (1 - W)/2 z + (1 + W)/2
+
+    where w and W are outputs of tanh and hence are in (-1, 1)
+
+    => 0 < z < 1
+
+    => z < Z < 1
+
+    w = 2z -1
+    W = 2(Z - z)/(1-z) -1
+    """
+
+    @classmethod
+    def w2z(cls, w: torch.Tensor) -> torch.Tensor:
+        return (w + 1) / 2
+
+    @property
+    def z(self) -> Tensor:
+        return self.w2z(self.data[..., 0, :])
+
+    @property
+    def Z(self) -> Tensor:
+        z = self.z
+        Z = z + self.w2z(self.data[..., 1, :]) * (1. - z)  # type: ignore
+
+        return Z
+
+    @classmethod
+    def from_zZ(cls: Type[TBoxTensor], z: Tensor, Z: Tensor) -> TBoxTensor:
+        if z.shape != Z.shape:
+            raise ValueError(
+                "Shape of z and Z should be same but is {} and {}".format(
+                    z.shape, Z.shape))
+        eps = torch.finfo(z.dtype).tiny  # type: ignore
+        w = (2 * z - 1)
+        W = 2 * (Z - z) / (1. - z) - 1.
 
         box_val: Tensor = torch.stack((w, W), -2)
 
