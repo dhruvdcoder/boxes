@@ -2,6 +2,7 @@ from torch import Tensor
 import torch
 import torch.nn.functional as F
 from typing import List, Tuple, Dict, Any, Optional, Union, Type, TypeVar
+tanh_eps = 1e-20
 
 
 def _box_shape_ok(t: Tensor) -> bool:
@@ -300,7 +301,9 @@ class TanhActivatedBoxTensor(BoxTensor):
 
     z = (w + 1)/2
     
-    Z = z + ((W + 1)/2) * (1-z) => Z = (1- (W+1)/2)z + (W+1)/2 = (1 - W)/2 z + (1 + W)/2
+    Z = z + ((W + 1)/2) * (1-z) 
+    => To avoid zero volume boxes z should not be equal to Z=> w should be in [-1., 1.)
+    => Also, W cannot be -1 => W should be in (-1, 1]
 
     where w and W are outputs of tanh and hence are in (-1, 1)
 
@@ -333,9 +336,10 @@ class TanhActivatedBoxTensor(BoxTensor):
             raise ValueError(
                 "Shape of z and Z should be same but is {} and {}".format(
                     z.shape, Z.shape))
-        eps = torch.finfo(z.dtype).tiny  # type: ignore
-        w = (2 * z - 1)
-        W = 2 * (Z - z) / (1. - z) - 1.
+        z_ = z.clamp(0., 1. - tanh_eps / 2.)
+        Z_ = Z.clamp(tanh_eps / 2., 1.)
+        w = (2 * z_ - 1)
+        W = 2 * (Z_ - z_) / (1. - z_) - 1.
 
         box_val: Tensor = torch.stack((w, W), -2)
 
@@ -366,13 +370,14 @@ class TanhActivatedBoxTensor(BoxTensor):
         w = t.index_select(
             dim,
             torch.tensor(
-                list(range(split_point)), dtype=torch.int64, device=t.device))
+                list(range(split_point)), dtype=torch.int64,
+                device=t.device)).clamp(-1., 1. - tanh_eps)
 
         W = t.index_select(
             dim,
             torch.tensor(
                 list(range(split_point, len_dim)),
                 dtype=torch.int64,
-                device=t.device))
+                device=t.device)).clamp(-1. + tanh_eps, 1.)
         box_val: Tensor = torch.stack((w, W), -2)
         return cls(box_val)
