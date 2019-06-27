@@ -165,20 +165,28 @@ class BoxTensor(object):
         return torch.prod((self.Z - self.z).clamp_min(0), dim=-1)
 
     @classmethod
-    def _soft_volume(cls, z: Tensor, Z: Tensor, temp: float = 1.) -> Tensor:
-        return torch.prod(F.softplus(Z - z, beta=temp), dim=-1)
+    def _soft_volume(cls,
+                     z: Tensor,
+                     Z: Tensor,
+                     temp: float = 1.,
+                     scale: float = 1.) -> Tensor:
+        # use scale to make sure that the product does not become very small because Z-z < 0
+        side_lengths = (F.softplus(Z - z, beta=temp) * scale)
+        return torch.prod(side_lengths, dim=-1)
 
-    def soft_volume(self, temp: float = 1.) -> Tensor:
+    def soft_volume(self, temp: float = 1., scale: float = 10.) -> Tensor:
         """Volume of boxes. Uses softplus instead of ReLU/clamp
 
         Returns:
             Tensor of shape (**, ) when self has shape (**, 2, num_dims)
         """
 
-        return self._soft_volume(self.z, self.Z, temp)
+        return self._soft_volume(self.z, self.Z, temp, scale)
 
-    def intersection_soft_volume(self, other: TBoxTensor,
-                                 temp: float = 1.) -> Tensor:
+    def intersection_soft_volume(self,
+                                 other: TBoxTensor,
+                                 temp: float = 1.,
+                                 scale: float = 1.) -> Tensor:
         """ Computes the soft volume of the intersection box
 
         Return:
@@ -186,7 +194,7 @@ class BoxTensor(object):
         """
         # intersection
         z, Z = self._intersection(other)
-        return self._soft_volume(z, Z, temp)
+        return self._soft_volume(z, Z, temp, scale)
 
     def log_clamp_volume(self) -> Tensor:
         eps = torch.finfo(self.data.dtype).tiny  # type: ignore
