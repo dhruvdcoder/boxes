@@ -2,6 +2,7 @@ from torch import Tensor
 import torch
 import torch.nn.functional as F
 from typing import List, Tuple, Dict, Any, Optional, Union, Type, TypeVar
+from boxes.utils import log1mexp
 tanh_eps = 1e-20
 
 
@@ -202,13 +203,45 @@ class BoxTensor(object):
 
         return res
 
+    @classmethod
+    def _log_soft_volume(cls, z: Tensor, Z: Tensor,
+                         temp: float = 1.) -> Tensor:
+        eps = torch.finfo(z.dtype).tiny  # type: ignore
+        return torch.sum(
+            torch.log(F.softplus(Z - z, beta=temp).clamp_min(eps)), dim=-1
+        )  # need this eps to that the derivative of log does not blow
+
     def log_soft_volume(self, temp: float = 1.) -> Tensor:
-        eps = torch.finfo(self.data.dtype).tiny  # type: ignore
-        res = torch.sum(
-            torch.log(F.softplus(self.Z - self.z, beta=temp).clamp_min(eps)),
-            dim=-1)
+        res = self._log_soft_volume(self.z, self.Z, temp=temp)
 
         return res
+
+    def intersection_log_soft_volume(self, other: TBoxTensor,
+                                     temp: float = 1.) -> Tensor:
+        z, Z = self._intersection(other)
+        vol = self._log_soft_volume(z, Z, temp=temp)
+        return vol
+
+    @classmethod
+    def _log_conditional_prob(cls,
+                              box1: TBoxTensor,
+                              box2: TBoxTensor,
+                              temp: float = 1.) -> Tuple[Tensor, Tensor]:
+        """ Gives P(b1|b2=1) ie two values, one for b1=1 and other for b1=0
+
+        Assume the shape of boxes to be (**, 2, num_dim)
+        """
+        log_numerator = box1.intersection_log_soft_volume(
+            box2, temp=temp)  # shape = (**,)
+        log_denominator = box2.log_soft_volume(temp=temp)  # shape =(**,)
+        log_cp1 = log_numerator - log_denominator
+        log_cp2 = log1mexp(log_cp1)
+        return log_cp1, log_cp2
+
+    def log_conditional_prob(self: TBoxTensor,
+                             on_box: TBoxTensor,
+                             temp: float = 1.) -> Tuple[Tensor, Tensor]:
+        return self._log_conditional_prob(self, on_box, temp=temp)
 
     @classmethod
     def cat(cls: Type[TBoxTensor],
