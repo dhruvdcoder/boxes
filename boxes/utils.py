@@ -20,10 +20,8 @@ def log1mexp(x: torch.Tensor, split_point=_log1mexp_switch) -> torch.Tensor:
 
     https://github.com/visinf/n3net/commit/31968bd49c7d638cef5f5656eb62793c46b41d76
     """
-    logexpm1 = torch.log(-torch.expm1(x))
-    logp1exp = torch.log1p(-torch.exp(x))
-    Z = torch.empty_like(logexpm1)
     logexpm1_switch = x > split_point
-    Z[logexpm1_switch] = logexpm1[logexpm1_switch]
-    Z[1 - logexpm1_switch] = logp1exp[1 - logexpm1_switch]
+    Z = torch.zeros_like(x)
+    Z[logexpm1_switch] = torch.log(-torch.expm1(x[logexpm1_switch]))
+    Z[1 - logexpm1_switch] = torch.log1p(-torch.exp(x[1 - logexpm1_switch]))
     return Z
