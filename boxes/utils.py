@@ -4,7 +4,8 @@ import math
 _log1mexp_switch = math.log(0.5)
 
 
-def log1mexp(x: torch.Tensor, split_point=_log1mexp_switch) -> torch.Tensor:
+def log1mexp(x: torch.Tensor, split_point=_log1mexp_switch,
+             exp_zero_eps=1e-7) -> torch.Tensor:
     """
     Computes log(1 - exp(x)).
 
@@ -22,6 +23,12 @@ def log1mexp(x: torch.Tensor, split_point=_log1mexp_switch) -> torch.Tensor:
     """
     logexpm1_switch = x > split_point
     Z = torch.zeros_like(x)
-    Z[logexpm1_switch] = torch.log(-torch.expm1(x[logexpm1_switch]))
+    logexpm1 = torch.log(-torch.expm1(x[logexpm1_switch]))
+    # hack the backward pass
+    # if expm1(x) gets very close to zero, then the grad log() will produce inf
+    # and inf*0 = nan. Hence clip the grad so that it does not produce inf
+    logexpm1_bw = torch.log(-torch.expm1(x[logexpm1_switch]) + exp_zero_eps)
+    Z[logexpm1_switch] = logexpm1.detach() + (
+        logexpm1_bw - logexpm1_bw.detach())
     Z[1 - logexpm1_switch] = torch.log1p(-torch.exp(x[1 - logexpm1_switch]))
     return Z
