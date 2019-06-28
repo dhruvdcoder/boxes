@@ -27,7 +27,8 @@ def log1mexp(x: torch.Tensor, split_point=_log1mexp_switch,
     # hack the backward pass
     # if expm1(x) gets very close to zero, then the grad log() will produce inf
     # and inf*0 = nan. Hence clip the grad so that it does not produce inf
-    logexpm1_bw = torch.log(-torch.expm1(x[logexpm1_switch]) + exp_zero_eps)
+    logexpm1_bw = torch.log(
+        -(torch.expm1(x[logexpm1_switch]).clamp_min(1e-38)) + exp_zero_eps)
     Z[logexpm1_switch] = logexpm1.detach() + (
         logexpm1_bw - logexpm1_bw.detach())
     Z[1 - logexpm1_switch] = torch.log1p(-torch.exp(x[1 - logexpm1_switch]))
