@@ -275,10 +275,12 @@ class BoxTensor(object):
         log_cp2 = log1mexp(log_cp1)
         return log_cp1, log_cp2
 
-    def log_conditional_prob(self: TBoxTensor,
-                             on_box: TBoxTensor,
-                             temp: float = 1.) -> Tuple[Tensor, Tensor]:
-        return self._log_conditional_prob(self, on_box, temp=temp)
+    def log_conditional_prob(
+            self: TBoxTensor,
+            on_box: TBoxTensor,
+            temp: float = 1.,
+            scale: Union[float, Tensor] = 1.) -> Tuple[Tensor, Tensor]:
+        return self._log_conditional_prob(self, on_box, temp=temp, scale=scale)
 
     @classmethod
     def cat(cls: Type[TBoxTensor],
