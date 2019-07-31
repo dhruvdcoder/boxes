@@ -34,3 +34,19 @@ def log1mexp(x: torch.Tensor, split_point=_log1mexp_switch,
         logexpm1_bw - logexpm1_bw.detach())
     Z[1 - logexpm1_switch] = torch.log1p(-torch.exp(x[1 - logexpm1_switch]))
     return Z
+
+
+def log1pexp(x: torch.Tensor):
+    """ Computes log(1+exp(x))
+
+    see: Page 7, eqn 10 of https://cran.r-project.org/web/packages/Rmpfr/vignettes/log1mexp-note.pdf
+    also see: https://github.com/SurajGupta/r-source/blob/master/src/nmath/plogis.c
+    """
+    Z = torch.zeros_like(x)
+    zone1 = (x <= 18.)
+    zone2 = (x > 18.) * (x < 33.3)  # And operator using *
+    zone3 = (x >= 33.3)
+    Z[zone1] = torch.log1p(torch.exp(x[zone1]))
+    Z[zone2] = x[zone2] + torch.exp(-(x[zone2]))
+    Z[zone3] = x[zone3]
+    return Z
