@@ -117,7 +117,7 @@ class BoxTensor(object):
             dim,
             torch.tensor(
                 list(range(split_point, len_dim)),
-                dtype=torch.int64,
+        d        dtype=torch.int64,
                 device=t.device))
 
         return cls.from_zZ(z, Z)
@@ -287,6 +287,19 @@ class BoxTensor(object):
             tensors: Tuple[TBoxTensor, ...]) -> TBoxTensor:
 
         return cls(torch.cat(tuple(map(lambda x: x.data, tensors)), -1))
+
+    @classmethod
+    def _scaled_box(cls, z_F: Tensor, Z_F: Tensor, z_R: Tensor,
+                    Z_R: Tensor) -> Tuple[Tensor, Tensor]:
+        L_R = (Z_R - z_R).clamp_min(0)
+        z_S = z_R + z_F * L_R
+        Z_S = Z_R + (Z_F - 1) * (Z_R - z_R)
+        return z_S, Z_S
+
+    def scaled_box(self, free_box: TBoxTensor,
+                   ref_box: TBoxTensor) -> "BoxTensor":
+        z, Z = self._scaled_box(free_box.z, free_box.Z, ref_box.z, ref_box.Z)
+        return BoxTensor.from_zZ(z, Z)
 
 
 def inv_sigmoid(v: Tensor) -> Tensor:
