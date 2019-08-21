@@ -117,7 +117,7 @@ class BoxTensor(object):
             dim,
             torch.tensor(
                 list(range(split_point, len_dim)),
-        d        dtype=torch.int64,
+                dtype=torch.int64,
                 device=t.device))
 
         return cls.from_zZ(z, Z)
