@@ -296,9 +296,8 @@ class BoxTensor(object):
         Z_S = Z_R + (Z_F - 1) * (Z_R - z_R)
         return z_S, Z_S
 
-    def scaled_box(self, free_box: TBoxTensor,
-                   ref_box: TBoxTensor) -> "BoxTensor":
-        z, Z = self._scaled_box(free_box.z, free_box.Z, ref_box.z, ref_box.Z)
+    def scaled_box(self, ref_box: TBoxTensor) -> "BoxTensor":
+        z, Z = self._scaled_box(self.z, self.Z, ref_box.z, ref_box.Z)
         return BoxTensor.from_zZ(z, Z)
 
 
