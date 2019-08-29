@@ -438,6 +438,21 @@ class TanhActivatedBoxTensor(BoxTensor):
         return cls(box_val)
 
     @classmethod
+    def _intersection(self: TBoxTensor,
+                      other: TBoxTensor) -> Tuple[Tensor, Tensor]:
+        z = torch.max(self.z, other.z)
+        Z = torch.min(self.Z, other.Z)
+        return z, Z
+
+    def intersection(self: TBoxTensor, other: TBoxTensor) -> TBoxTensor:
+        """ Gives intersection of self and other.
+
+        .. note:: This function can give fipped boxes, i.e. where z[i] > Z[i]
+        """
+        z, Z = self._intersection(other)
+        return BoxTensor.from_zZ(z, Z)
+
+    @classmethod
     def from_split(cls: Type[TBoxTensor], t: Tensor,
                    dim: int = -1) -> TBoxTensor:
         """Creates a BoxTensor by splitting on the dimension dim at midpoint
