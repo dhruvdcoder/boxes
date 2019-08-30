@@ -437,13 +437,6 @@ class TanhActivatedBoxTensor(BoxTensor):
 
         return cls(box_val)
 
-    @classmethod
-    def _intersection(self: TBoxTensor,
-                      other: TBoxTensor) -> Tuple[Tensor, Tensor]:
-        z = torch.max(self.z, other.z)
-        Z = torch.min(self.Z, other.Z)
-        return z, Z
-
     def intersection(self: TBoxTensor, other: TBoxTensor) -> TBoxTensor:
         """ Gives intersection of self and other.
 
