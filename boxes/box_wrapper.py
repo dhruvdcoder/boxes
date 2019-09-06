@@ -293,7 +293,7 @@ class BoxTensor(object):
                     Z_R: Tensor) -> Tuple[Tensor, Tensor]:
         L_R = (Z_R - z_R).clamp_min(0)
         z_S = z_R + z_F * L_R
-        Z_S = Z_R + (Z_F - 1) * (Z_R - z_R)
+        Z_S = Z_R + (Z_F - 1) * L_R
         return z_S, Z_S
 
     def scaled_box(self, ref_box: TBoxTensor) -> "BoxTensor":
