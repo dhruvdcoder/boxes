@@ -3,7 +3,7 @@ import torch
 from torch import Tensor
 from torch.nn import Module, Parameter
 import torch.nn.functional as F
-from .box_wrapper import SigmoidBoxTensor, BoxTensor, TBoxTensor, TanhActivatedBoxTensor
+from .box_wrapper import SigmoidBoxTensor, BoxTensor, TBoxTensor, TanhActivatedBoxTensor, TanhActivatedCenterSideBoxTensor
 from typing import (List, Tuple, Dict, Optional, Any, Union, TypeVar, Type,
                     Callable)
 from allennlp.modules.seq2vec_encoders import pytorch_seq2vec_wrapper
@@ -739,7 +739,8 @@ class BoxView(torch.nn.Module):
     """Presents input as boxes"""
     box_types: Dict[str, Type[TBoxTensor]] = {  # type: ignore
         'SigmoidBoxes': SigmoidBoxTensor,
-        'TanhActivatedBoxes': TanhActivatedBoxTensor
+        'TanhActivatedBoxes': TanhActivatedBoxTensor,
+        'TanhActivatedCenterSideBoxTensor': TanhActivatedCenterSideBoxTensor
     }
 
     def __init__(self, box_type: str, split_dim: int = -1):

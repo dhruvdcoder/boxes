@@ -481,3 +481,40 @@ class TanhActivatedBoxTensor(BoxTensor):
                 device=t.device)).clamp(-1. + tanh_eps, 1.)
         box_val: Tensor = torch.stack((w, W), -2)
         return cls(box_val)
+
+
+class TanhActivatedCenterSideBoxTensor(TanhActivatedBoxTensor):
+    """Same as BoxTensor but with a parameterization which is assumed to be the output
+    from tanh activation. Differs from TanhActivatedBoxTensor() in the way it parameterizes the boxes
+
+    let (*, num_dims) be the shape of output of the activations, then the BoxTensor is
+    created with shape (*, zZ, num_dims/2)
+
+    c = (w + 1)/2 => c in (0,1)
+
+    l = (W + 1)/2 => l in (0,1)
+
+    z = sigmoid(c - l)
+    Z = sigmoid(c + l) 
+
+    """
+
+    @classmethod
+    def w2z(cls, w: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError()
+
+    @property
+    def z(self) -> Tensor:
+        c = self.data[..., 0, :]
+        l = self.data[..., 1, :]
+        return torch.sigmoid(c - l)
+
+    @property
+    def Z(self) -> Tensor:
+        c = self.data[..., 0, :]
+        l = self.data[..., 1, :]
+        return torch.sigmoid(c + l)
+
+    @classmethod
+    def from_zZ(cls: Type[TBoxTensor], z: Tensor, Z: Tensor) -> TBoxTensor:
+        raise NotImplementedError()
