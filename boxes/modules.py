@@ -740,7 +740,7 @@ class BoxView(torch.nn.Module):
     box_types: Dict[str, Type[TBoxTensor]] = {  # type: ignore
         'SigmoidBoxes': SigmoidBoxTensor,
         'TanhActivatedBoxes': TanhActivatedBoxTensor,
-        'TanhActivatedCenterSideBoxTensor': TanhActivatedCenterSideBoxTensor
+        'TanhActivatedCenterSideBoxes': TanhActivatedCenterSideBoxTensor
     }
 
     def __init__(self, box_type: str, split_dim: int = -1):
