@@ -930,7 +930,7 @@ class BoxEmbedding(Embedding):
     box_types = {'SigmoidBoxTensor': SigmoidBoxTensor, 'BoxTensor': BoxTensor}
 
     def init_weights(self):
-        raise NotImplementedError
+        torch.nn.init.xavier_uniform_(self.weight)
 
     def __init__(
             self,
