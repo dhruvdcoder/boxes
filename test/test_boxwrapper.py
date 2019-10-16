@@ -166,6 +166,7 @@ def test_from_zZ_grad():
     class Identity(torch.nn.Module):
         def forward(self, inp):
             z, Z = inp
+
             return SigmoidBoxTensor.from_zZ(z, Z).data
 
     layer = Identity()
@@ -192,6 +193,7 @@ def test_from_split_grad():
         def forward(self, inp):
             inp = inp * self.p
             res = SigmoidBoxTensor.from_split(inp, -1).data
+
             return res
 
     layer = Identity()
@@ -206,5 +208,25 @@ def test_from_split_grad():
         torch.autograd.gradcheck(layer, inp)
 
 
+def test_broadcast_intersection():
+    # dim_size = 2
+    # batch_size = 3
+    # extra_dim_size = 2
+    z1 = torch.tensor([[0.2, 0.3], [0.1, 0.4]]).float()
+    Z1 = torch.tensor([[0.5, 0.5], [0.6, 0.6]]).float()
+    z2 = torch.tensor([[0.1, 0.1], [0.7, 0.1]]).float()
+    Z2 = torch.tensor([[0.5, 0.2], [0.9, 0.2]]).float()
+    z0 = torch.tensor([.3, .4]).float()
+    Z0 = torch.tensor([.4, 0.7]).float()
+    b0 = BoxTensor.from_zZ(z0, Z0)
+    b1 = BoxTensor.from_zZ(z1, Z1)
+    res = b0.intersection(b1)
+    expected = torch.tensor([[[0.3, 0.4], [0.4, 0.5]], [[0.3, 0.4], [0.4,
+                                                                     0.6]]])
+    assert np.allclose(res.data.numpy(), expected.numpy())
+    rev = b1.intersection(b0)
+    assert np.allclose(rev.data.numpy(), expected.numpy())
+
+
 if __name__ == '__main__':
-    test_creation_from_zZ_sigmoid_box()
+    test_broadcast_intersection()
