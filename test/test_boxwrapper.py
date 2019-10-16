@@ -226,6 +226,8 @@ def test_broadcast_intersection():
     assert np.allclose(res.data.numpy(), expected.numpy())
     rev = b1.intersection(b0)
     assert np.allclose(rev.data.numpy(), expected.numpy())
+    res_vol = b0.intersection_log_soft_volume(b1, temp=1000)
+    print(res_vol)
 
 
 if __name__ == '__main__':
