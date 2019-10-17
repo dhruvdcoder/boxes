@@ -8,8 +8,7 @@ install_requires = [
 "plotly",
 "pytest",
 "mypy==0.701",
-"mypy-extensions==0.4.1",
-"matplotlib"
+"mypy-extensions==0.4.1"
     ]
 setup(
     name='boxes',
