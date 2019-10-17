@@ -4,7 +4,7 @@ from pathlib import Path
 install_requires = [
     "allennlp>=0.9.0",
 "torch>=1.2.0",
-"matplotlib"
+"matplotlib",
 "plotly",
 "pytest",
 "mypy==0.701",
