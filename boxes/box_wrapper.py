@@ -126,6 +126,7 @@ class BoxTensor(object):
                       other: TBoxTensor) -> Tuple[Tensor, Tensor]:
         z = torch.max(self.z, other.z)
         Z = torch.min(self.Z, other.Z)
+
         return z, Z
 
     def intersection(self: TBoxTensor, other: TBoxTensor) -> TBoxTensor:
@@ -134,6 +135,7 @@ class BoxTensor(object):
         .. note:: This function can give fipped boxes, i.e. where z[i] > Z[i]
         """
         z, Z = self._intersection(other)
+
         return self.from_zZ(z, Z)
 
     def join(self: TBoxTensor, other: TBoxTensor) -> TBoxTensor:
@@ -172,6 +174,7 @@ class BoxTensor(object):
                 return False
             else:
                 return True
+
         if isinstance(t, float):
             return (0. < t <= 1.)
 
@@ -182,10 +185,12 @@ class BoxTensor(object):
                      temp: float = 1.,
                      scale: Union[float, Tensor] = 1.) -> Tensor:
         """ scale has to be between 0 and 1"""
+
         if not cls._in_zero_one(scale):
             raise ValueError(
                 "Scale should be in (0,1] but is {}".format(scale))
         side_lengths = (F.softplus(Z - z, beta=temp))
+
         return torch.prod(side_lengths, dim=-1) * scale
 
     def soft_volume(self, temp: float = 1.,
@@ -209,6 +214,7 @@ class BoxTensor(object):
         """
         # intersection
         z, Z = self._intersection(other)
+
         return self._soft_volume(z, Z, temp, scale)
 
     def log_clamp_volume(self) -> Tensor:
@@ -224,14 +230,16 @@ class BoxTensor(object):
                          temp: float = 1.,
                          scale: Union[float, Tensor] = 1.) -> Tensor:
         eps = torch.finfo(z.dtype).tiny  # type: ignore
+
         if isinstance(scale, float):
             s = torch.tensor(scale)
         else:
             s = scale
+
         return (torch.sum(
             torch.log(F.softplus(Z - z, beta=temp).clamp_min(eps)),
             dim=-1) + torch.log(s)
-                )  # need this eps to that the derivative of log does not blow
+        )  # need this eps to that the derivative of log does not blow
 
     def log_soft_volume(self,
                         temp: float = 1.,
@@ -247,6 +255,7 @@ class BoxTensor(object):
             scale: Union[float, Tensor] = 1.) -> Tensor:
         z, Z = self._intersection(other)
         vol = self._log_soft_volume(z, Z, temp=temp, scale=scale)
+
         return vol
 
     @classmethod
@@ -263,9 +272,11 @@ class BoxTensor(object):
         log_numerator = box1.intersection_log_soft_volume(
             box2, temp=temp)  # shape = (**,)
         log_denominator = box2.log_soft_volume(temp=temp)  # shape =(**,)
+
         if not cls._in_zero_one(scale):
             raise ValueError(
                 "scale should be in (0,1] but is {}".format(scale))
+
         if isinstance(scale, float):
             s = torch.tensor(scale)
         else:
@@ -273,6 +284,7 @@ class BoxTensor(object):
 
         log_cp1 = log_numerator - log_denominator + torch.log(s)
         log_cp2 = log1mexp(log_cp1)
+
         return log_cp1, log_cp2
 
     def log_conditional_prob(
@@ -280,6 +292,7 @@ class BoxTensor(object):
             on_box: TBoxTensor,
             temp: float = 1.,
             scale: Union[float, Tensor] = 1.) -> Tuple[Tensor, Tensor]:
+
         return self._log_conditional_prob(self, on_box, temp=temp, scale=scale)
 
     @classmethod
@@ -294,10 +307,12 @@ class BoxTensor(object):
         L_R = (Z_R - z_R).clamp_min(0)
         z_S = z_R + z_F * L_R
         Z_S = Z_R + (Z_F - 1) * L_R
+
         return z_S, Z_S
 
     def scaled_box(self, ref_box: TBoxTensor) -> "BoxTensor":
         z, Z = self._scaled_box(self.z, self.Z, ref_box.z, ref_box.Z)
+
         return BoxTensor.from_zZ(z, Z)
 
 
@@ -375,6 +390,7 @@ class SigmoidBoxTensor(BoxTensor):
                 dtype=torch.int64,
                 device=t.device))
         box_val: Tensor = torch.stack((w, W), -2)
+
         return cls(box_val)
 
 
@@ -385,15 +401,15 @@ class TanhActivatedBoxTensor(BoxTensor):
     Supported activations:
 
         1. tanh
-    
+
     let (*, num_dims) be the shape of output of the activations, then the BoxTensor is
     created with shape (*, zZ, num_dims/2)
 
     For tanh:
 
     z = (w + 1)/2
-    
-    Z = z + ((W + 1)/2) * (1-z) 
+
+    Z = z + ((W + 1)/2) * (1-z)
     => To avoid zero volume boxes z should not be equal to Z=> w should be in [-1., 1.)
     => Also, W cannot be -1 => W should be in (-1, 1]
 
@@ -443,6 +459,7 @@ class TanhActivatedBoxTensor(BoxTensor):
         .. note:: This function can give fipped boxes, i.e. where z[i] > Z[i]
         """
         z, Z = self._intersection(other)
+
         return BoxTensor.from_zZ(z, Z)
 
     @classmethod
@@ -480,7 +497,30 @@ class TanhActivatedBoxTensor(BoxTensor):
                 dtype=torch.int64,
                 device=t.device)).clamp(-1. + tanh_eps, 1.)
         box_val: Tensor = torch.stack((w, W), -2)
+
         return cls(box_val)
+
+
+class TanhActivatedMinMaxBoxTensor(TanhActivatedBoxTensor):
+    """
+    Same as TanhActivatedBoxTensor as in it assumes input from a tanh but
+    different in how it uses this input to create boxes.
+
+    z = min((1+w)/2 , (1+W)/2)
+    Z = max((1+w)/2, (1+W)/2)
+    """
+
+    @property
+    def z(self) -> Tensor:
+        return torch.min(self.w2z(self.data), dim=-1)
+
+    @property
+    def Z(self) -> Tensor:
+        return torch.max(self.w2z(self.data), dim=-1)
+
+    @classmethod
+    def from_zZ(cls: Type[TBoxTensor], z: Tensor, Z: Tensor) -> TBoxTensor:
+        raise NotImplementedError
 
 
 class TanhActivatedCenterSideBoxTensor(TanhActivatedBoxTensor):
@@ -495,7 +535,7 @@ class TanhActivatedCenterSideBoxTensor(TanhActivatedBoxTensor):
     l = (W + 1)/2 => l in (0,1)
 
     z = sigmoid(c - l)
-    Z = sigmoid(c + l) 
+    Z = sigmoid(c + l)
 
     """
 
@@ -507,12 +547,14 @@ class TanhActivatedCenterSideBoxTensor(TanhActivatedBoxTensor):
     def z(self) -> Tensor:
         c = self.data[..., 0, :]
         l = self.data[..., 1, :]
+
         return torch.sigmoid(c - l)
 
     @property
     def Z(self) -> Tensor:
         c = self.data[..., 0, :]
         l = self.data[..., 1, :]
+
         return torch.sigmoid(c + l)
 
     @classmethod
