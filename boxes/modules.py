@@ -3,7 +3,7 @@ import torch
 from torch import Tensor
 from torch.nn import Module, Parameter
 import torch.nn.functional as F
-from .box_wrapper import SigmoidBoxTensor, BoxTensor, TBoxTensor, TanhActivatedBoxTensor, TanhActivatedCenterSideBoxTensor
+from .box_wrapper import SigmoidBoxTensor, BoxTensor, TBoxTensor, TanhActivatedBoxTensor, TanhActivatedCenterSideBoxTensor, TanhActivatedMinMaxBoxTensor
 from typing import (List, Tuple, Dict, Optional, Any, Union, TypeVar, Type,
                     Callable)
 from allennlp.modules.seq2vec_encoders import pytorch_seq2vec_wrapper
@@ -86,9 +86,11 @@ class Boxes(Module):
         :param kwargs: Unused for now, but include this for future possible parameters.
         """
         super().__init__()
+
         if method == "gibbs":
             sides = torch.ones(num_models, num_boxes, dims)
             log_min_vol = torch.log(torch.tensor(init_min_vol))
+
             for i in range(gibbs_iter):
                 idx = torch.randint(0, int(dims),
                                     (num_models, num_boxes))[:, :, None]
@@ -102,7 +104,10 @@ class Boxes(Module):
             Z = z + sides
 
         else:
-            rand_param = lambda min, max: min + torch.rand(num_models, num_boxes, dims) * (max - min)
+
+            def rand_param(min, max): return min + \
+                torch.rand(num_models, num_boxes, dims) * (max - min)
+
             if init_min_vol == 0:
                 per_dim_min = 0
             elif init_min_vol > 0:
@@ -124,6 +129,7 @@ class Boxes(Module):
         :param kwargs: Unused for now, but include this for future possible parameters.
         :return: NamedTensor of shape (model, id, zZ, dim).
         """
+
         return self.boxes[:, box_indices]
 
 
@@ -176,6 +182,7 @@ class MinMaxBoxes(Module):
         Z, _ = torch.max(
             self.boxes[:, box_indices],
             dim=2)  # Tensor of shape (model, box, dim)
+
         return torch.stack((z, Z), dim=2)
 
 
@@ -215,6 +222,7 @@ class DeltaBoxes(Module):
         :param kwargs: Unused for now, but include this for future possible parameters.
         :return: Tensor of shape (model, id, zZ, dim).
         """
+
         return torch.stack((self.z[:, box_indices], self.z[:, box_indices] +
                             torch.exp(self.logdelta[:, box_indices])),
                            dim=2)
@@ -262,6 +270,7 @@ class SigmoidBoxes(Module):
         """
         z = torch.sigmoid(self.w[:, box_indices])
         Z = z + torch.sigmoid(self.W[:, box_indices]) * (1 - z)
+
         return torch.stack((z, Z), dim=2)
 
 
@@ -308,6 +317,7 @@ class MinMaxSigmoidBoxes(Module):
         unit_cube_boxes = torch.sigmoid(self.boxes)
         z, _ = torch.min(unit_cube_boxes, dim=2)
         Z, _ = torch.max(unit_cube_boxes, dim=2)
+
         return torch.stack((z, Z), dim=2)
 
 
@@ -355,7 +365,8 @@ class BoxModel(Module):
             z = torch.zeros(dims)
             Z = torch.ones(dims)
             self.universe_box = lambda _: torch.stack((z, Z))[None, None]
-            self.universe_vol = lambda _: self.vol_func(self.universe_box(None)).squeeze()
+            self.universe_vol = lambda _: self.vol_func(
+                self.universe_box(None)).squeeze()
             self.clamp = True
         else:
             self.universe_box = universe_box
@@ -367,6 +378,7 @@ class BoxModel(Module):
     def forward(self, box_indices: Tensor) -> Dict:
         # Unary
         box_embeddings_orig = self.box_embedding()
+
         if self.clamp:
             box_embeddings = box_embeddings_orig.clamp(0, 1)
         else:
@@ -415,11 +427,13 @@ class BoxModelStable(Module):
             z = torch.zeros(dims)
             Z = torch.ones(dims)
             self.universe_box = lambda _: torch.stack((z, Z))[None, None]
-            self.log_universe_vol = lambda _: self.log_vol_func(self.universe_box(None)).squeeze()
+            self.log_universe_vol = lambda _: self.log_vol_func(
+                self.universe_box(None)).squeeze()
             self.clamp = True
         else:
             self.universe_box = universe_box
-            self.log_universe_vol = lambda b: self.log_vol_func(self.universe_box(b))
+            self.log_universe_vol = lambda b: self.log_vol_func(
+                self.universe_box(b))
             self.clamp = False
 
         self.weights = LogWeightedSum(num_models)
@@ -427,6 +441,7 @@ class BoxModelStable(Module):
     def forward(self, box_indices: Tensor) -> Dict:
         # Unary
         box_embeddings_orig = self.box_embedding()
+
         if self.clamp:
             box_embeddings = box_embeddings_orig.clamp(0, 1)
         else:
@@ -474,7 +489,8 @@ class BoxModelTriples(Module):
             z = torch.zeros(dims)
             Z = torch.ones(dims)
             self.universe_box = lambda _: torch.stack((z, Z))[None, None]
-            self.universe_vol = lambda _: self.vol_func(self.universe_box(None)).squeeze()
+            self.universe_vol = lambda _: self.vol_func(
+                self.universe_box(None)).squeeze()
             self.clamp = True
         else:
             self.universe_box = universe_box
@@ -486,6 +502,7 @@ class BoxModelTriples(Module):
     def forward(self, ids):
         # Unary
         box_embeddings_orig = self.box_embedding()
+
         if self.clamp:
             box_embeddings = box_embeddings_orig.clamp(0, 1)
         else:
@@ -502,6 +519,7 @@ class BoxModelTriples(Module):
         two_boxes_mask = (1 - three_boxes_mask) * (1 - unary_box_mask)
 
         num_unary_boxes = torch.sum(unary_box_mask)
+
         if num_unary_boxes > 0:
             unary_boxes = box_embeddings[:, ids[unary_box_mask, 0]]
             unary_probs = self.weights(
@@ -510,6 +528,7 @@ class BoxModelTriples(Module):
 
         two_vol = torch.tensor([]).to(box_embeddings.device)
         num_two_boxes = torch.sum(two_boxes_mask)
+
         if num_two_boxes > 0:
             A = box_embeddings[:, ids[two_boxes_mask, 0]]
             B = box_embeddings[:, ids[two_boxes_mask, 1]]
@@ -523,6 +542,7 @@ class BoxModelTriples(Module):
             probs[two_boxes_mask] = two_cond
 
         num_three_boxes = torch.sum(three_boxes_mask)
+
         if num_three_boxes > 0:
             A = box_embeddings[:, ids[three_boxes_mask, 0]]
             B = box_embeddings[:, ids[three_boxes_mask, 1]]
@@ -570,11 +590,13 @@ class BoxModelJointStable(Module):
             z = torch.zeros(dims)
             Z = torch.ones(dims)
             self.universe_box = lambda _: torch.stack((z, Z))[None, None]
-            self.log_universe_vol = lambda _: self.log_vol_func(self.universe_box(None)).squeeze()
+            self.log_universe_vol = lambda _: self.log_vol_func(
+                self.universe_box(None)).squeeze()
             self.clamp = True
         else:
             self.universe_box = universe_box
-            self.log_universe_vol = lambda b: self.log_vol_func(self.universe_box(b))
+            self.log_universe_vol = lambda b: self.log_vol_func(
+                self.universe_box(b))
             self.clamp = False
 
         self.weights = LogWeightedSum(num_models)
@@ -582,6 +604,7 @@ class BoxModelJointStable(Module):
     def forward(self, box_indices: Tensor) -> Dict:
         # Unary
         box_embeddings_orig = self.box_embedding()
+
         if self.clamp:
             box_embeddings = box_embeddings_orig.clamp(0, 1)
         else:
@@ -625,7 +648,8 @@ class BoxModelJoint(Module):
             z = torch.zeros(dims)
             Z = torch.ones(dims)
             self.universe_box = lambda _: torch.stack((z, Z))[None, None]
-            self.universe_vol = lambda _: self.vol_func(self.universe_box(None)).squeeze()
+            self.universe_vol = lambda _: self.vol_func(
+                self.universe_box(None)).squeeze()
             self.clamp = True
         else:
             self.universe_box = universe_box
@@ -637,6 +661,7 @@ class BoxModelJoint(Module):
     def forward(self, box_indices: Tensor) -> Dict:
         # Unary
         box_embeddings_orig = self.box_embedding()
+
         if self.clamp:
             box_embeddings = box_embeddings_orig.clamp(0, 1)
         else:
@@ -681,7 +706,8 @@ class BoxModelJointTriple(Module):
             z = torch.zeros(dims)
             Z = torch.ones(dims)
             self.universe_box = lambda _: torch.stack((z, Z))[None, None]
-            self.universe_vol = lambda _: self.vol_func(self.universe_box(None)).squeeze()
+            self.universe_vol = lambda _: self.vol_func(
+                self.universe_box(None)).squeeze()
             self.clamp = True
         else:
             self.universe_box = universe_box
@@ -693,6 +719,7 @@ class BoxModelJointTriple(Module):
     def forward(self, box_indices: Tensor) -> Dict:
         # Unary
         box_embeddings_orig = self.box_embedding()
+
         if self.clamp:
             box_embeddings = box_embeddings_orig.clamp(0, 1)
         else:
@@ -740,7 +767,8 @@ class BoxView(torch.nn.Module):
     box_types: Dict[str, Type[TBoxTensor]] = {  # type: ignore
         'SigmoidBoxes': SigmoidBoxTensor,
         'TanhActivatedBoxes': TanhActivatedBoxTensor,
-        'TanhActivatedCenterSideBoxes': TanhActivatedCenterSideBoxTensor
+        'TanhActivatedCenterSideBoxes': TanhActivatedCenterSideBoxTensor,
+        'TanhActivatedMinMaxBoxTensor': TanhActivatedMinMaxBoxTensor
     }
 
     def __init__(self, box_type: str, split_dim: int = -1):
@@ -750,6 +778,7 @@ class BoxView(torch.nn.Module):
 
     def forward(self, inp: torch.Tensor) -> TBoxTensor:
         res = self.box_types[self.box_type].from_split(inp, self.split_dim)
+
         return res
 
 
@@ -757,14 +786,18 @@ class BoxView(torch.nn.Module):
 def mask_from_lens(lens: List[int],
                    t: Optional[torch.Tensor] = None,
                    value: Union[int, float, torch.Tensor] = 1.):
+
     if t is None:
         t = torch.zeros(len(lens), max(lens))
+
     if t.size(0) != len(lens):
         raise ValueError(
             "t.size(0) should be equal to len(lens) but are {} and {}".format(
                 t.size(0), len(lens)))
+
     for i, l in enumerate(lens):
         t[i][list(range(l))] = value
+
     return t
 
 
@@ -773,10 +806,11 @@ class LSTMBox(torch.nn.LSTM):
 
     def __init__(self, *args, box_type='SigmoidBoxes', **kwargs):
         # make sure that number of hidden dim is even
-        #hidden_dim = args[1] * 2 if kwargs.get(
-        #'bidirectional', default=False) else args[1]
+        # hidden_dim = args[1] * 2 if kwargs.get(
+        # 'bidirectional', default=False) else args[1]
         self.box_type = box_type
         hidden_dim = args[1]
+
         if hidden_dim % 2 != 0:
             raise ValueError(
                 "hidden_dim  has to be even but is {}".format(hidden_dim))
@@ -792,12 +826,14 @@ class LSTMBox(torch.nn.LSTM):
         packed_inp = False
 
         # check if packed. If so, unpack
+
         if isinstance(output, torch.nn.utils.rnn.PackedSequence):
             packed_inp = True
             output, seq_lens = torch.nn.utils.rnn.pad_packed_sequence(
                 output, batch_first=self.batch_first)
         # when LSTM is bidirectional, the output of both directions is used in
         # z as well as Z. Hence, output of both directions is split
+
         if self.bidirectional:
 
             if self.batch_first:
@@ -830,13 +866,16 @@ class PytorchSeq2BoxWrapper(pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper):
     def __init__(self,
                  module: torch.nn.modules.RNNBase,
                  box_type='SigmoidBoxes') -> None:
+
         if module.hidden_size % 2 != 0:
             raise ValueError(
                 "module.hidden_size  has to be even but is {}".format(
                     module.hidden_size))
+
         if not module.batch_first:
             raise ValueError("module.batch_first should be True")
         super().__init__(module)
+
         if isinstance(module, torch.nn.LSTM):
             if box_type != 'TanhActivatedBoxes':
                 logger.warn("Changing box_type to "
@@ -851,6 +890,7 @@ class PytorchSeq2BoxWrapper(pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper):
 
         .. todo:: Logically correct output for get_output_dim when output is boxes
         """
+
         if after_box:
             return int(super().get_output_dim() /
                        2)  # this is still not right becuase
@@ -867,6 +907,7 @@ class PytorchSeq2BoxWrapper(pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper):
 
         # when LSTM is bidirectional, the output of both directions is used in
         # z as well as Z. Hence, output of both directions is split
+
         if self._module.bidirectional:
 
             if self._module.batch_first:
@@ -885,7 +926,7 @@ class PytorchSeq2BoxWrapper(pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper):
         return box_output
 
 
-#class LSTMSigmoidBox(torch.nn.Module):
+# class LSTMSigmoidBox(torch.nn.Module):
 #    """Module with standard lstm at the bottom but Boxes at the output"""
 #
 #    def __init__(self, *args, **kwargs):
