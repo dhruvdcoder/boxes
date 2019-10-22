@@ -598,3 +598,22 @@ class TanhActivatedCenterSideBoxTensor(TanhActivatedBoxTensor):
     @classmethod
     def from_zZ(cls: Type[TBoxTensor], z: Tensor, Z: Tensor) -> TBoxTensor:
         raise NotImplementedError()
+
+
+class DeltaBoxTensor(SigmoidBoxTensor):
+    """Same as BoxTensor but with a different parameterization: (**,wW, num_dims)
+
+    z = w
+    Z = z + delta(which is always positive)
+    """
+
+    @property
+    def z(self) -> Tensor:
+        return self.data[..., 0, :]
+
+    @property
+    def Z(self) -> Tensor:
+        z = self.z
+        Z = z + torch.nn.functional.relu(self.data[..., 1, :])
+
+        return Z
