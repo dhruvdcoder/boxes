@@ -179,7 +179,7 @@ class PytorchSeq2BoxWrapper(pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper):
 
 
 class BoxEmbedding(Embedding):
-    box_types = {'SigmoidBoxTensor': SigmoidBoxTensor, 'BoxTensor': BoxTensor}
+    box_types = {'SigmoidBoxTensor': SigmoidBoxTensor, 'DeltaBoxTensor': DeltaBoxTensor, 'BoxTensor': BoxTensor}
 
     def init_weights(self):
         torch.nn.init.xavier_uniform_(self.weight)
