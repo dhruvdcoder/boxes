@@ -512,11 +512,11 @@ class TanhActivatedMinMaxBoxTensor(TanhActivatedBoxTensor):
 
     @property
     def z(self) -> Tensor:
-        return torch.min(self.w2z(self.data), dim=-1)[0]
+        return torch.min(self.w2z(self.data), dim=-2)[0]
 
     @property
     def Z(self) -> Tensor:
-        return torch.max(self.w2z(self.data), dim=-1)[0]
+        return torch.max(self.w2z(self.data), dim=-2)[0]
 
     @classmethod
     def from_zZ(cls: Type[TBoxTensor], z: Tensor, Z: Tensor) -> TBoxTensor:
