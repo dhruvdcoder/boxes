@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 from torch.nn import Module, Parameter
 import torch.nn.functional as F
-from .box_wrapper import SigmoidBoxTensor, BoxTensor, TBoxTensor, TanhActivatedBoxTensor, TanhActivatedCenterSideBoxTensor
+from .box_wrapper import SigmoidBoxTensor, BoxTensor, TBoxTensor, TanhActivatedBoxTensor, TanhActivatedCenterSideBoxTensor, DeltaBoxTensor
 from typing import (List, Tuple, Dict, Optional, Any, Union, TypeVar, Type,
                     Callable)
 from allennlp.modules.seq2vec_encoders import pytorch_seq2vec_wrapper
@@ -179,7 +179,7 @@ class PytorchSeq2BoxWrapper(pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper):
 
 
 class BoxEmbedding(Embedding):
-    box_types = {'SigmoidBoxTensor': SigmoidBoxTensor, 'BoxTensor': BoxTensor}
+    box_types = {'SigmoidBoxTensor': SigmoidBoxTensor, 'DeltaBoxTensor': DeltaBoxTensor, 'BoxTensor': BoxTensor}
 
     def init_weights(self):
         torch.nn.init.xavier_uniform_(self.weight)
