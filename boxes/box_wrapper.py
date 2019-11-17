@@ -363,6 +363,14 @@ class BoxTensor(object):
 
         return BoxTensor.from_zZ(z, Z)
 
+    @classmethod
+    def _weights_init(cls, weights: torch.Tensor):
+        """An in-place weight initializer method
+        which can be used to do sensible init
+        of weights depending on box type.
+        For this base class, this method does nothing"""
+        pass
+
 
 def inv_sigmoid(v: Tensor) -> Tensor:
     return torch.log(v / (1. - v))  # type:ignore
@@ -614,6 +622,6 @@ class DeltaBoxTensor(SigmoidBoxTensor):
     @property
     def Z(self) -> Tensor:
         z = self.z
-        Z = z + torch.nn.functional.relu(self.data[..., 1, :])
+        Z = z + torch.nn.functional.softplus(self.data[..., 1, :])
 
         return Z
