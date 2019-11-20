@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 from torch.nn import Module, Parameter
 import torch.nn.functional as F
-from .box_wrapper import SigmoidBoxTensor, BoxTensor, TBoxTensor, TanhActivatedBoxTensor, TanhActivatedCenterSideBoxTensor, DeltaBoxTensor
+from .box_wrapper import SigmoidBoxTensor, BoxTensor, TBoxTensor, DeltaBoxTensor
 from typing import (List, Tuple, Dict, Optional, Any, Union, TypeVar, Type,
                     Callable)
 from allennlp.modules.seq2vec_encoders import pytorch_seq2vec_wrapper
@@ -15,14 +15,6 @@ TTensor = TypeVar("TTensor", bound="torch.Tensor")
 #TBoxTensor = TypeVar("TBoxTensor", bound="BoxTensor")
 
 
-class BoxView(torch.nn.Module):
-    """Presents input as boxes"""
-    box_types: Dict[str, Type[TBoxTensor]] = {  # type: ignore
-        'SigmoidBoxes': SigmoidBoxTensor,
-        'TanhActivatedBoxes': TanhActivatedBoxTensor,
-        'TanhActivatedCenterSideBoxes': TanhActivatedCenterSideBoxTensor,
-        'TanhActivatedMinMaxBoxTensor': TanhActivatedMinMaxBoxTensor
-    }
 
     def __init__(self, box_type: str, split_dim: int = -1):
         self.box_type = box_type
