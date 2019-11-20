@@ -16,17 +16,6 @@ TTensor = TypeVar("TTensor", bound="torch.Tensor")
 
 
 
-    def __init__(self, box_type: str, split_dim: int = -1):
-        self.box_type = box_type
-        self.split_dim = split_dim
-        super().__init__()
-
-    def forward(self, inp: torch.Tensor) -> TBoxTensor:
-        res = self.box_types[self.box_type].from_split(inp, self.split_dim)
-
-        return res
-
-
 @torch.no_grad()
 def mask_from_lens(lens: List[int],
                    t: Optional[torch.Tensor] = None,
