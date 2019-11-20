@@ -1,13 +1,15 @@
 from setuptools import setup, find_packages
 from pathlib import Path
 
-requirements_file = Path('requirements.txt')
-
-if (not requirements_file.exists()) or (not requirements_file.is_file()):
-    raise Exception("No requirements.txt found")
-with open(requirements_file) as f:
-    install_requires = list(f.read().splitlines())
-
+install_requires = [
+    "allennlp>=0.9.0",
+"torch>=1.2.0",
+"matplotlib",
+"plotly",
+"pytest",
+"mypy==0.701",
+"mypy-extensions==0.4.1"
+    ]
 setup(
     name='boxes',
     version='0.0.1',

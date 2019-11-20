@@ -122,10 +122,58 @@ class BoxTensor(object):
 
         return cls.from_zZ(z, Z)
 
+    @classmethod
+    def _broadcast_other(cls, t1: TBoxTensor, t2: TBoxTensor):
+        """ broadcast t2 by adding dimensions from the right
+         where either self, or other is actually
+         an array of boxes"""
+        # we can broadcast any dimension except the last two
+        # we assume t1.shape >= t2.shape
+
+        if t1.data.shape == t2.data.shape:
+            return t2
+
+        if len(t1.data.shape) < len(t2.data.shape):
+            raise ValueError
+
+        if t1.data.shape[-1] != t2.data.shape[-1]:
+            raise ValueError(
+                "Cannot broadcast boxes of shape {} and {}".format(
+                    t1.data.shape, t2.data.shape))
+
+        if t1.data.shape[-2] != t2.data.shape[-2]:
+            raise ValueError("Cannot broadcaset boxes {} and {}".format(
+                t1.data.shape, t2.data.shape))
+        t1_data = t1.data
+        t2_data = t2.data
+
+        for dim in range(-3, -len(t1_data.shape) - 1, -1):
+            if dim + len(t2_data.shape) < 0:  # t1 has more dims left
+                t2_data = t2_data.unsqueeze(dim)
+
+                continue
+
+            if t2_data.shape[dim] != t1_data.shape[dim]:
+                t2_data = t2_data.unsqueeze(dim)
+
+        if len(t1_data.shape) != len(t2_data.shape):
+            raise ValueError
+
+        return cls(t2_data)
+
     def _intersection(self: TBoxTensor,
                       other: TBoxTensor) -> Tuple[Tensor, Tensor]:
-        z = torch.max(self.z, other.z)
-        Z = torch.min(self.Z, other.Z)
+        t1 = self
+        t2 = other
+        # broadcast if necessary
+
+        if t1.data.shape > t2.data.shape:
+            t2 = self._broadcast_other(t1, t2)
+        elif t1.data.shape < t2.data.shape:
+            t1 = self._broadcast_other(t2, t1)
+
+        z = torch.max(t1.z, t2.z)
+        Z = torch.min(t1.Z, t2.Z)
 
         return z, Z
 
@@ -315,6 +363,14 @@ class BoxTensor(object):
 
         return BoxTensor.from_zZ(z, Z)
 
+    @classmethod
+    def _weights_init(cls, weights: torch.Tensor):
+        """An in-place weight initializer method
+        which can be used to do sensible init
+        of weights depending on box type.
+        For this base class, this method does nothing"""
+        pass
+
 
 def inv_sigmoid(v: Tensor) -> Tensor:
     return torch.log(v / (1. - v))  # type:ignore
@@ -343,6 +399,9 @@ class SigmoidBoxTensor(BoxTensor):
 
     @classmethod
     def from_zZ(cls: Type[TBoxTensor], z: Tensor, Z: Tensor) -> TBoxTensor:
+        """ This method is blocked for now"""
+        raise RuntimeError("Do not use from_zZ method of SigmoidBoxTensor")
+
         if z.shape != Z.shape:
             raise ValueError(
                 "Shape of z and Z should be same but is {} and {}".format(
@@ -392,6 +451,15 @@ class SigmoidBoxTensor(BoxTensor):
         box_val: Tensor = torch.stack((w, W), -2)
 
         return cls(box_val)
+
+    def intersection(self: TBoxTensor, other: TBoxTensor) -> TBoxTensor:
+        """ Gives intersection of self and other.
+
+        .. note:: This function can give fipped boxes, i.e. where z[i] > Z[i]
+        """
+        z, Z = self._intersection(other)
+
+        return BoxTensor.from_zZ(z, Z)
 
 
 class TanhActivatedBoxTensor(BoxTensor):
@@ -560,3 +628,22 @@ class TanhActivatedCenterSideBoxTensor(TanhActivatedBoxTensor):
     @classmethod
     def from_zZ(cls: Type[TBoxTensor], z: Tensor, Z: Tensor) -> TBoxTensor:
         raise NotImplementedError()
+
+
+class DeltaBoxTensor(SigmoidBoxTensor):
+    """Same as BoxTensor but with a different parameterization: (**,wW, num_dims)
+
+    z = w
+    Z = z + delta(which is always positive)
+    """
+
+    @property
+    def z(self) -> Tensor:
+        return self.data[..., 0, :]
+
+    @property
+    def Z(self) -> Tensor:
+        z = self.z
+        Z = z + torch.nn.functional.softplus(self.data[..., 1, :])
+
+        return Z
