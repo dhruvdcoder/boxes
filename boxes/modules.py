@@ -20,7 +20,8 @@ class BoxView(torch.nn.Module):
     box_types: Dict[str, Type[TBoxTensor]] = {  # type: ignore
         'SigmoidBoxes': SigmoidBoxTensor,
         'TanhActivatedBoxes': TanhActivatedBoxTensor,
-        'TanhActivatedCenterSideBoxes': TanhActivatedCenterSideBoxTensor
+        'TanhActivatedCenterSideBoxes': TanhActivatedCenterSideBoxTensor,
+        'TanhActivatedMinMaxBoxTensor': TanhActivatedMinMaxBoxTensor
     }
 
     def __init__(self, box_type: str, split_dim: int = -1):
@@ -129,10 +130,8 @@ class PytorchSeq2BoxWrapper(pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper):
         super().__init__(module)
 
         if isinstance(module, torch.nn.LSTM):
-            if box_type != 'TanhActivatedBoxes':
-                logger.warn("Changing box_type to "
-                            "TanhActivatedBoxes because the encoder is LSTM")
-                box_type = 'TanhActivatedBoxes'
+            if box_type not in  ['TanhActivatedBoxes','TanhActivatedCenterSideBoxes','TanhActivatedMinMaxBoxTensor']:
+                raise ValueError("Can only use TanhActivated* boxes with torch.nn.LSTM as encoder. But found {}".format(box_type))
 
         self.box_type = box_type
         self.boxes = BoxView(box_type, split_dim=-1)

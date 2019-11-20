@@ -569,6 +569,28 @@ class TanhActivatedBoxTensor(BoxTensor):
         return cls(box_val)
 
 
+class TanhActivatedMinMaxBoxTensor(TanhActivatedBoxTensor):
+    """
+    Same as TanhActivatedBoxTensor as in it assumes input from a tanh but
+    different in how it uses this input to create boxes.
+
+    z = min((1+w)/2 , (1+W)/2)
+    Z = max((1+w)/2, (1+W)/2)
+    """
+
+    @property
+    def z(self) -> Tensor:
+        return torch.min(self.w2z(self.data), dim=-2)[0]
+
+    @property
+    def Z(self) -> Tensor:
+        return torch.max(self.w2z(self.data), dim=-2)[0]
+
+    @classmethod
+    def from_zZ(cls: Type[TBoxTensor], z: Tensor, Z: Tensor) -> TBoxTensor:
+        raise NotImplementedError
+
+
 class TanhActivatedCenterSideBoxTensor(TanhActivatedBoxTensor):
     """Same as BoxTensor but with a parameterization which is assumed to be the output
     from tanh activation. Differs from TanhActivatedBoxTensor() in the way it parameterizes the boxes

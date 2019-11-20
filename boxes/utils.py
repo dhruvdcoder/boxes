@@ -32,7 +32,8 @@ def log1mexp(x: torch.Tensor, split_point=_log1mexp_switch,
     logexpm1_bw = torch.log(-torch.expm1(x[logexpm1_switch]) + exp_zero_eps)
     Z[logexpm1_switch] = logexpm1.detach() + (
         logexpm1_bw - logexpm1_bw.detach())
-    Z[1 - logexpm1_switch] = torch.log1p(-torch.exp(x[1 - logexpm1_switch]))
+    #Z[1 - logexpm1_switch] = torch.log1p(-torch.exp(x[1 - logexpm1_switch]))
+    Z[~logexpm1_switch] = torch.log1p(-torch.exp(x[~logexpm1_switch]))
     return Z
 
 
