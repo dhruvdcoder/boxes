@@ -162,7 +162,11 @@ class BoxEmbedding(Embedding):
     box_types = {'SigmoidBoxTensor': SigmoidBoxTensor, 'DeltaBoxTensor': DeltaBoxTensor, 'BoxTensor': BoxTensor}
 
     def init_weights(self):
-        torch.nn.init.xavier_uniform_(self.weight)
+        if self.box_type == 'SigmoidBoxTensor':
+            torch.nn.init.uniform_(self.weight, -0.25, 0.25)
+        else:
+            torch.nn.init.uniform_(self.weight[:,:self.box_embedding_dim], -0.5, 0.5)
+            torch.nn.init.uniform_(self.weight[:,self.box_embedding_dim:], -0.1, 0.1)
 
     def __init__(
             self,
@@ -198,6 +202,7 @@ class BoxEmbedding(Embedding):
             sparse=sparse,
             vocab_namespace=vocab_namespace,
             pretrained_file=pretrained_file)
+        self.box_type= box_type
         try:
             self.box = self.box_types[box_type]
         except KeyError as ke:
