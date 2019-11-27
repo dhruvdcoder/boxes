@@ -8,12 +8,12 @@ from typing import (List, Tuple, Dict, Optional, Any, Union, TypeVar, Type,
 from allennlp.modules.seq2vec_encoders import pytorch_seq2vec_wrapper
 from allennlp.modules.token_embedders import Embedding
 import logging
+import numpy as np
 logger = logging.getLogger(__name__)
 
 TTensor = TypeVar("TTensor", bound="torch.Tensor")
 
-#TBoxTensor = TypeVar("TBoxTensor", bound="BoxTensor")
-
+# TBoxTensor = TypeVar("TBoxTensor", bound="BoxTensor")
 
 
 @torch.no_grad()
@@ -111,8 +111,13 @@ class PytorchSeq2BoxWrapper(pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper):
         super().__init__(module)
 
         if isinstance(module, torch.nn.LSTM):
-            if box_type not in  ['TanhActivatedBoxes','TanhActivatedCenterSideBoxes','TanhActivatedMinMaxBoxTensor']:
-                raise ValueError("Can only use TanhActivated* boxes with torch.nn.LSTM as encoder. But found {}".format(box_type))
+            if box_type not in [
+                    'TanhActivatedBoxes', 'TanhActivatedCenterSideBoxes',
+                    'TanhActivatedMinMaxBoxTensor'
+            ]:
+                raise ValueError(
+                    "Can only use TanhActivated* boxes with torch.nn.LSTM as encoder. But found {}"
+                    .format(box_type))
 
         self.box_type = box_type
         self.boxes = BoxView(box_type, split_dim=-1)
@@ -159,14 +164,26 @@ class PytorchSeq2BoxWrapper(pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper):
 
 
 class BoxEmbedding(Embedding):
-    box_types = {'SigmoidBoxTensor': SigmoidBoxTensor, 'DeltaBoxTensor': DeltaBoxTensor, 'BoxTensor': BoxTensor}
+    box_types = {
+        'SigmoidBoxTensor': SigmoidBoxTensor,
+        'DeltaBoxTensor': DeltaBoxTensor,
+        'BoxTensor': BoxTensor
+    }
 
     def init_weights(self):
-        if self.box_type == 'SigmoidBoxTensor':
-            torch.nn.init.uniform_(self.weight, -0.25, 0.25)
-        else:
-            torch.nn.init.uniform_(self.weight[:,:self.box_embedding_dim], -0.5, 0.5)
-            torch.nn.init.uniform_(self.weight[:,self.box_embedding_dim:], -0.1, 0.1)
+        # if self.box_type == 'SigmoidBoxTensor':
+        # torch.nn.init.uniform_(self.weight, -0.25, 0.25)
+        # else:
+        #    torch.nn.init.uniform_(self.weight[:, :self.box_embedding_dim],
+        #                           -0.5, 0.5)
+        #    torch.nn.init.uniform_(self.weight[:, self.box_embedding_dim:],
+        #                           -0.1, 0.1)
+        torch.nn.init.uniform_(self.weight[..., :self.box_embedding_dim],
+                               -self.init_interval_center,
+                               self.init_interval_center)
+        torch.nn.init.uniform_(self.weight[..., self.box_embedding_dim:],
+                               -self.init_interval_delta,
+                               self.init_interval_delta)
 
     def __init__(
             self,
@@ -182,6 +199,8 @@ class BoxEmbedding(Embedding):
             sparse: bool = False,
             vocab_namespace: str = None,
             pretrained_file: str = None,
+            init_interval_center=0.25,
+            init_interval_delta=0.1,
     ) -> None:
         """Similar to allennlp embeddings but returns box
         tensor by splitting the output of usual embeddings
@@ -202,7 +221,9 @@ class BoxEmbedding(Embedding):
             sparse=sparse,
             vocab_namespace=vocab_namespace,
             pretrained_file=pretrained_file)
-        self.box_type= box_type
+        self.box_type = box_type
+        self.init_interval_delta = init_interval_delta
+        self.init_interval_center = init_interval_center
         try:
             self.box = self.box_types[box_type]
         except KeyError as ke:
@@ -215,3 +236,23 @@ class BoxEmbedding(Embedding):
         box_emb = self.box.from_split(emb)
 
         return box_emb
+
+    @property
+    def all_boxes(self) -> TBoxTensor:
+        all_index = torch.arange(
+            0,
+            self.num_embeddings,
+            dtype=torch.long,
+            device=self.weight.device)
+        all_ = self.forward(all_index)
+
+        return all_
+
+    def get_bounding_box(self) -> BoxTensor:
+        all_ = self.all_boxes
+        z = all_.z  # shape = (num_embeddings, box_embedding_dim)
+        Z = all_.Z
+        z_min, _ = z.min(dim=0)
+        Z_max, _ = Z.max(dim=0)
+
+        return BoxTensor(z_min, Z_max)
