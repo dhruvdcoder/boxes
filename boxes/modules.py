@@ -255,7 +255,7 @@ class BoxEmbedding(Embedding):
         z_min, _ = z.min(dim=0)
         Z_max, _ = Z.max(dim=0)
 
-        return BoxTensor(z_min, Z_max)
+        return BoxTensor.from_zZ(z_min, Z_max)
 
     def get_volumes(self, temp: Union[float, torch.Tensor]) -> torch.Tensor:
         return self.all_boxes.log_soft_volume(temp=temp)
