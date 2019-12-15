@@ -215,6 +215,15 @@ class BoxTensor(object):
 
         return torch.prod((self.Z - self.z).clamp_min(0), dim=-1)
 
+    def dimension_wise_clamp_volume(self) -> Tensor:
+        """ Returns clamp volume per dimension
+
+        Returns:
+            Tensor of shape(**, num_dims) when self has shape (**,2,num_dims)
+        """
+
+        return (self.Z - self.z).clamp_min(0)
+
     @classmethod
     def _in_zero_one(cls, t: Union[Tensor, float]):
         if torch.is_tensor(t):
@@ -225,6 +234,21 @@ class BoxTensor(object):
 
         if isinstance(t, float):
             return (0. < t <= 1.)
+
+    @classmethod
+    def _dim_wise_soft_volume(cls,
+                              z: Tensor,
+                              Z: Tensor,
+                              temp: float = 1.,
+                              scale: Union[float, Tensor] = 1.) -> Tensor:
+        """ scale has to be between 0 and 1"""
+
+        if not cls._in_zero_one(scale):
+            raise ValueError(
+                "Scale should be in (0,1] but is {}".format(scale))
+        side_lengths = (F.softplus(Z - z, beta=temp))
+
+        return side_lengths * scale
 
     @classmethod
     def _soft_volume(cls,
@@ -240,6 +264,17 @@ class BoxTensor(object):
         side_lengths = (F.softplus(Z - z, beta=temp))
 
         return torch.prod(side_lengths, dim=-1) * scale
+
+    def dimension_wise_soft_volume(self,
+                                   temp: float = 1.,
+                                   scale: Union[float, Tensor] = 1.) -> Tensor:
+        """Volume of intervals. Uses softplus instead of ReLU/clamp
+
+        Returns:
+            Tensor of shape (**, num_dims) when self has shape (**, 2, num_dims)
+        """
+
+        return self._dim_wise_soft_volume(self.z, self.Z, temp, scale)
 
     def soft_volume(self, temp: float = 1.,
                     scale: Union[float, Tensor] = 1.) -> Tensor:
@@ -265,6 +300,21 @@ class BoxTensor(object):
 
         return self._soft_volume(z, Z, temp, scale)
 
+    def dimension_wise_intersection_soft_volume(
+            self,
+            other: TBoxTensor,
+            temp: float = 1.,
+            scale: Union[float, Tensor] = 1.) -> Tensor:
+        """ Computes the soft volume of the intersection intervals
+
+        Return:
+            Tensor of shape(**,num_dims) when self and other have shape (**, 2, num_dims)
+        """
+        # intersection
+        z, Z = self._intersection(other)
+
+        return self._dim_wise_soft_volume(z, Z, temp, scale)
+
     def log_clamp_volume(self) -> Tensor:
         eps = torch.finfo(self.data.dtype).tiny  # type: ignore
         res = torch.sum(torch.log((self.Z - self.z).clamp_min(eps)), dim=-1)
@@ -289,12 +339,54 @@ class BoxTensor(object):
             dim=-1) + torch.log(s)
         )  # need this eps to that the derivative of log does not blow
 
+    @classmethod
+    def _dimension_wise_log_soft_volume(
+            cls,
+            z: Tensor,
+            Z: Tensor,
+            temp: float = 1.,
+            scale: Union[float, Tensor] = 1.) -> Tensor:
+        eps = torch.finfo(z.dtype).tiny  # type: ignore
+
+        if isinstance(scale, float):
+            s = torch.tensor(scale)
+        else:
+            s = scale
+
+        return torch.log(F.softplus(Z - z,
+                                    beta=temp).clamp_min(eps)) + torch.log(s)
+
+    def dimension_wise_log_soft_volume(self,
+                                       temp: float = 1.,
+                                       scale: Union[float, Tensor] = 1.
+                                       ) -> Tensor:
+        res = self._dimension_wise_log_soft_volume(
+            self.z, self.Z, temp=temp, scale=scale)
+
+        return res
+
     def log_soft_volume(self,
                         temp: float = 1.,
                         scale: Union[float, Tensor] = 1.) -> Tensor:
         res = self._log_soft_volume(self.z, self.Z, temp=temp, scale=scale)
 
         return res
+
+    def dimension_wise_intersection_log_soft_volume(
+            self,
+            other: TBoxTensor,
+            temp: float = 1.,
+            scale: Union[float, Tensor] = 1.) -> Tensor:
+        """ Computes the log soft volume of the intersection intervals
+
+         Return:
+             Tensor of shape(**,num_dims) when self and other have shape (**, 2, num_dims)
+         """
+        z, Z = self._intersection(other)
+        vol = self._dimension_wise_log_soft_volume(
+            z, Z, temp=temp, scale=scale)
+
+        return vol
 
     def intersection_log_soft_volume(
             self,
@@ -335,6 +427,38 @@ class BoxTensor(object):
 
         return log_cp1, log_cp2
 
+    @classmethod
+    def _dimension_wise_log_conditional_prob(
+            cls,
+            box1: TBoxTensor,
+            box2: TBoxTensor,
+            temp: float = 1.,
+            scale: Union[float, Tensor] = 1.) -> Tuple[Tensor, Tensor]:
+        """ Gives P(b1|b2=1) ie two values, one for b1=1 and other for b1=0
+
+            Returns:
+                Tuple of tensors of shape (**, num_dims). First tensor is
+                log_p and the second is log(1-p)
+        """
+        log_numerators = box1.dimension_wise_intersection_log_soft_volume(
+            box2, temp=temp)  # shape = (**, num_dims)
+        log_denominators = box2.dimension_wise_log_soft_volume(
+            temp=temp)  # shape =(**, num_dims)
+
+        if not cls._in_zero_one(scale):
+            raise ValueError(
+                "scale should be in (0,1] but is {}".format(scale))
+
+        if isinstance(scale, float):
+            s = torch.tensor(scale)
+        else:
+            s = scale
+
+        log_cp1 = log_numerators - log_denominators + torch.log(s)
+        log_cp2 = log1mexp(log_cp1)
+
+        return log_cp1, log_cp2
+
     def log_conditional_prob(
             self: TBoxTensor,
             on_box: TBoxTensor,
@@ -342,6 +466,21 @@ class BoxTensor(object):
             scale: Union[float, Tensor] = 1.) -> Tuple[Tensor, Tensor]:
 
         return self._log_conditional_prob(self, on_box, temp=temp, scale=scale)
+
+    def dimension_wise_log_conditional_prob(
+            self: TBoxTensor,
+            on_box: TBoxTensor,
+            temp: float = 1.,
+            scale: Union[float, Tensor] = 1.) -> Tuple[Tensor, Tensor]:
+        """ Gives P(b1|b2=1) ie two values, one for b1=1 and other for b1=0
+
+            Returns:
+                Tuple of tensors of shape (**, num_dims). First tensor is
+                log_p and the second is log(1-p)
+        """
+
+        return self._dimension_wise_log_conditional_prob(
+            self, on_box, temp=temp, scale=scale)
 
     @classmethod
     def cat(cls: Type[TBoxTensor],
