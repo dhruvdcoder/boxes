@@ -167,9 +167,9 @@ class BoxTensor(object):
         t2 = other
         # broadcast if necessary
 
-        if t1.data.shape > t2.data.shape:
+        if len(t1.data.shape) > len(t2.data.shape):
             t2 = self._broadcast_other(t1, t2)
-        elif t1.data.shape < t2.data.shape:
+        elif len(t1.data.shape) < len(t2.data.shape):
             t1 = self._broadcast_other(t2, t1)
 
         z = torch.max(t1.z, t2.z)
