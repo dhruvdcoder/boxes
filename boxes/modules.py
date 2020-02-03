@@ -178,12 +178,20 @@ class BoxEmbedding(Embedding):
         #                           -0.5, 0.5)
         #    torch.nn.init.uniform_(self.weight[:, self.box_embedding_dim:],
         #                           -0.1, 0.1)
-        torch.nn.init.uniform_(self.weight[..., :self.box_embedding_dim],
+        if self.box_type != 'SigmoidBoxTensor':
+            torch.nn.init.uniform_(self.weight[..., :self.box_embedding_dim],
                                -self.init_interval_center,
                                self.init_interval_center)
-        torch.nn.init.uniform_(self.weight[..., self.box_embedding_dim:],
+            torch.nn.init.uniform_(self.weight[..., self.box_embedding_dim:],
                                -self.init_interval_delta,
                                self.init_interval_delta)
+        else:
+            torch.nn.init.uniform_(self.weight[..., :self.box_embedding_dim],
+                               -self.init_interval_center,
+                               self.init_interval_center)
+            torch.nn.init.uniform_(self.weight[..., self.box_embedding_dim:],
+                               -0.4,
+                               -0.4+self.init_interval_delta)
 
     def __init__(
             self,
