@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 from torch.nn import Module, Parameter
 import torch.nn.functional as F
-from .box_wrapper import SigmoidBoxTensor, BoxTensor, TBoxTensor, DeltaBoxTensor
+from .box_wrapper import SigmoidBoxTensor, BoxTensor, TBoxTensor, DeltaBoxTensor, MinDeltaBoxesOnTorus
 from typing import (List, Tuple, Dict, Optional, Any, Union, TypeVar, Type,
                     Callable)
 from allennlp.modules.seq2vec_encoders import pytorch_seq2vec_wrapper

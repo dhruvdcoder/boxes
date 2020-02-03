@@ -786,3 +786,65 @@ class DeltaBoxTensor(SigmoidBoxTensor):
         Z = z + torch.nn.functional.softplus(self.data[..., 1, :])
 
         return Z
+
+class MinDeltaBoxesOnTorus(SigmoidBoxTensor):
+
+    @property
+    def z(self) -> Tensor:
+        return self.data[..., 0, :]
+
+    @property
+    def Z(self) -> Tensor:
+        return torch.sigmoid(self.data[..., 1, :])
+
+    def _intersection_volume(self,
+        boxes: Tensor,
+        log: bool,
+        eps: float = 1e-7,
+        _scaling_factor: Optional[Tensor] = None) -> Tensor:
+        """
+        :param boxes: Tensor(..., intersect_axis, min/delta, embedding_dim)
+        :param log: If true returns log volume
+        :param eps: If returning log volume we clamp the input to log at this number
+        :param _scaling_factor: Used for recursion, will be set internally
+        :return: Tensor(...) of volumes
+        """
+        if log:
+            vol_func = lambda z: torch.sum(torch.log(z.clamp_min(0)+eps), dim=-1)
+            if _scaling_factor is None:
+                _scaling_factor = torch.tensor(0.0)
+            rescale_func = lambda z: z + _scaling_factor
+        else:
+            vol_func = lambda z: torch.prod(z, dim=-1)
+            if _scaling_factor is None:
+                _scaling_factor = torch.tensor(1.0)
+            rescale_func = lambda z: z * _scaling_factor
+        # boxes.shape = prefix, N, 2, 2
+        if len(boxes.shape) == 2:
+            return vol_func(boxes[1,:])
+        first_box = boxes[...,[0],:,:]  # shape = prefix, 1, 2, 2
+        # Calculate first box volume
+        first_box_volume = vol_func(first_box[...,0,1,:])  # shape = prefix
+        if boxes.shape[-3] == 1:  # if there are no more boxes, we stop recursing
+            return rescale_func(first_box_volume)
+        else:
+            boxes = boxes[..., 1:, :, :]  # shape = prefix, N-1, 2, 2
+            boxes[...,0,:] -= first_box[...,0,:]  # shape = prefix, N-1, 2
+            boxes[...,0,:] %= 1  # shape = prefix, N-1, 2
+            zZ = torch.stack((boxes[...,0,:], boxes[...,0,:] + boxes[...,1,:]), dim=-2) # shape = prefix, N-1, 2, 2
+            all_possible = torch.stack((zZ-1,zZ,zZ+1), dim=-3)  # shape = prefix, N-1, 3, 2, 2
+            # all_possible[...,1,:].shape = prefix, N-1, 3, 2
+            # first_box[...,[1],:].shape = prefix, 1, 1, 2
+            int_z = torch.max(all_possible[...,0,:], torch.tensor(0.0))
+            int_Z = torch.min(all_possible[...,1,:], first_box[...,[1],:])
+            out_delta = torch.sum(torch.clamp(int_Z - int_z, 0), dim=-2)
+            # Calculate new z/delta coordinates
+            out_z = boxes[...,0,:] * (boxes[...,0,:] < first_box[...,1,:])
+            # Scale to first box only
+            # Note: We avoid a division by zero using masking.
+            # The rest will end up with a scaling factor of 0, so we don't worry about them.
+            boxes = torch.stack((out_z, out_delta), dim=-2)
+            alive_boxes = (first_box[...,0,1,:] != 0).all(dim=-1)
+            boxes[alive_boxes] /= first_box[alive_boxes][..., [1], :]
+            return _intersection_volume(boxes, log, eps, rescale_func(first_box_volume))
+   
