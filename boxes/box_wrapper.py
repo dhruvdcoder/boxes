@@ -797,10 +797,45 @@ class MinDeltaBoxesOnTorus(SigmoidBoxTensor):
     def Z(self) -> Tensor:
         return torch.sigmoid(self.data[..., 1, :])
 
+    def per_dim_int_length(self,
+        boxes: Tensor,
+        _scaling_factor: Tensor = torch.ones(1)) -> Tensor:
+        """
+        :param boxes: Tensor(..., intersect_axis, min/delta, embedding_dim)
+        :param _scaling_factor: Used for recursion, will be set internally
+        :return: Tensor(..., embedding_dim) of intersection length in each dimension
+        """
+        if len(boxes.shape) == 2:
+            return boxes[1,:]
+        # boxes.shape = prefix, N, 2, 2
+        first_box = boxes[...,[0],:,:]  # shape = prefix, 1, 2, 2
+        if boxes.shape[-3] == 1:  # if there are no more boxes, we stop recursing
+            return _scaling_factor * first_box[...,0,1,:]
+        else:
+            boxes = boxes[..., 1:, :, :]  # shape = prefix, N-1, 2, 2
+            boxes[...,0,:] -= first_box[...,0,:]  # shape = prefix, N-1, 2
+            boxes[...,0,:] %= 1  # shape = prefix, N-1, 2
+            zZ = torch.stack((boxes[...,0,:], boxes[...,0,:] + boxes[...,1,:]), dim=-2) # shape = prefix, N-1, 2, 2
+            all_possible = torch.stack((zZ-1,zZ,zZ+1), dim=-3)  # shape = prefix, N-1, 3, 2, 2
+            # all_possible[...,1,:].shape = prefix, N-1, 3, 2
+            # first_box[...,[1],:].shape = prefix, 1, 1, 2
+            int_z = torch.max(all_possible[...,0,:], torch.tensor(0.0))
+            int_Z = torch.min(all_possible[...,1,:], first_box[...,[1],:])
+            out_delta = torch.sum(torch.clamp(int_Z - int_z, 0), dim=-2)
+            # Calculate new z/delta coordinates
+            out_z = boxes[...,0,:] * (boxes[...,0,:] < first_box[...,1,:])
+            # Scale to first box only
+            # We don't bother scaling dimensions where the first box has side length 0, since
+            # they will end up with a scaling factor of 0 anyway.
+            boxes = torch.stack((out_z, out_delta), dim=-2)
+            dead_sides = first_box[...,[1],:] < 1e-8
+            boxes /= torch.max(first_box[..., [1], :], dead_sides.float())
+            return per_dim_int_length(boxes, first_box[...,0,1,:] * _scaling_factor)
+
     def _intersection_volume(self,
         boxes: Tensor,
         log: bool,
-        eps: float = 1e-7,
+        eps: float = 1e-8,
         _scaling_factor: Optional[Tensor] = None) -> Tensor:
         """
         :param boxes: Tensor(..., intersect_axis, min/delta, embedding_dim)
@@ -847,4 +882,3 @@ class MinDeltaBoxesOnTorus(SigmoidBoxTensor):
             alive_boxes = (first_box[...,0,1,:] != 0).all(dim=-1)
             boxes[alive_boxes] /= first_box[alive_boxes][..., [1], :]
             return _intersection_volume(boxes, log, eps, rescale_func(first_box_volume))
-   
