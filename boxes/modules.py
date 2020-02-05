@@ -167,7 +167,8 @@ class BoxEmbedding(Embedding):
     box_types = {
         'SigmoidBoxTensor': SigmoidBoxTensor,
         'DeltaBoxTensor': DeltaBoxTensor,
-        'BoxTensor': BoxTensor
+        'BoxTensor': BoxTensor,
+        'MinDeltaBoxesOnTorus': MinDeltaBoxesOnTorus
     }
 
     def init_weights(self):
