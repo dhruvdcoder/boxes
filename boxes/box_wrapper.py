@@ -533,18 +533,6 @@ class BoxTensor(object):
 
         return accross_dim_  # shape (**)
 
-    def contained_violations(self,
-                             other: TBoxTensor,
-                             margin: float = 0,
-                             per_dim_op='max',
-                             accross_dim_op='max'):
-        """ When other is supposed to contain self"""
-        per_dim_ = self._dimension_wise_positive_violations(
-            self, other, margin=margin, op=per_dim_op)
-        accross_dim_ = self._pick_dim(per_dim_, method=accross_dim_op)
-
-        return accross_dim_
-
     def does_not_contain_violations(self,
                                     other: TBoxTensor,
                                     margin: float = 0,
@@ -553,18 +541,6 @@ class BoxTensor(object):
         """ When self is not supposed to contain other"""
         per_dim_ = self._dimension_wise_positive_violations(
             self, other, margin=margin, op=per_dim_op)
-        accross_dim_ = self._pick_dim(per_dim_, method=accross_dim_op)
-
-        return accross_dim_
-
-    def is_not_contained_violations(self,
-                                    other: TBoxTensor,
-                                    margin: float = 0,
-                                    per_dim_op='min',
-                                    accross_dim_op='min'):
-        """ When other is not supposed to contain self"""
-        per_dim_ = self._dimension_wise_positive_violations(
-            other, self, margin=margin, op=per_dim_op)
         accross_dim_ = self._pick_dim(per_dim_, method=accross_dim_op)
 
         return accross_dim_
