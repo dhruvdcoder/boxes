@@ -70,6 +70,12 @@ class BoxTensor(object):
 
         return self.data[..., 1, :]
 
+    @property
+    def centre(self) -> Tensor:
+        """Centre coordinate as Tensor"""
+
+        return (self.z + self.Z)/2
+
     @classmethod
     def from_zZ(cls: Type[TBoxTensor], z: Tensor, Z: Tensor) -> TBoxTensor:
         """
