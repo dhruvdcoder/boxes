@@ -70,6 +70,12 @@ class BoxTensor(object):
 
         return self.data[..., 1, :]
 
+    @property
+    def centre(self) -> Tensor:
+        """Centre coordinate as Tensor"""
+
+        return (self.z + self.Z)/2
+
     @classmethod
     def from_zZ(cls: Type[TBoxTensor], z: Tensor, Z: Tensor) -> TBoxTensor:
         """
@@ -505,6 +511,28 @@ class BoxTensor(object):
                                      box2.Z))  # shape= (**,num_dims)
 
     @classmethod
+    def _dimension_wise_negative_violations(cls,
+                                            box1: TBoxTensor,
+                                            box2: TBoxTensor,
+                                            margin: float = 0,
+                                            op='min'):
+        """deta+ according to the paper. box1 is subset of box2"""
+
+        if op == 'max':
+            operation = torch.max
+        elif op == 'min':
+            operation = torch.min
+        else:
+            raise ValueError
+
+        return operation(
+            # shape= (**, num_dims)
+            torch.nn.functional.relu(box2.Z + margin - box1.z),
+            # shape = (**,num_dims)
+            torch.nn.functional.relu(box1.Z + margin -
+                                     box2.z))  # shape= (**,num_dims)
+
+    @classmethod
     def _pick_dim(cls, t: torch.Tensor, method='max'):
         # t shape=(**, num_dims)
 
@@ -539,7 +567,7 @@ class BoxTensor(object):
                                     per_dim_op='min',
                                     accross_dim_op='min'):
         """ When self is not supposed to contain other"""
-        per_dim_ = self._dimension_wise_positive_violations(
+        per_dim_ = self._dimension_wise_negative_violations(
             self, other, margin=margin, op=per_dim_op)
         accross_dim_ = self._pick_dim(per_dim_, method=accross_dim_op)
 
