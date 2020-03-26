@@ -163,6 +163,17 @@ class PytorchSeq2BoxWrapper(pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper):
         return box_output
 
 
+def _uniform_init_using_minmax(weight, emb_dim, param1, param2, box_type):
+    with torch.no_grad():
+        temp = torch.zeros_like(weight)
+        torch.nn.init.uniform_(temp, param1, param2)
+        z, Z = torch.min(temp[..., :emb_dim], temp[..., emb_dim:]), torch.max(
+            temp[..., :emb_dim], temp[..., emb_dim:])
+        w, W = box_type.get_wW(z, Z)
+        weight[..., :emb_dim] = w
+        weight[..., emb_dim:] = W
+
+
 class BoxEmbedding(Embedding):
     box_types = {
         'SigmoidBoxTensor': SigmoidBoxTensor,
@@ -179,20 +190,27 @@ class BoxEmbedding(Embedding):
         #                           -0.5, 0.5)
         #    torch.nn.init.uniform_(self.weight[:, self.box_embedding_dim:],
         #                           -0.1, 0.1)
-        if self.box_type != 'SigmoidBoxTensor':
-            torch.nn.init.uniform_(self.weight[..., :self.box_embedding_dim],
-                               -self.init_interval_center,
-                               self.init_interval_center)
-            torch.nn.init.uniform_(self.weight[..., self.box_embedding_dim:],
-                               -self.init_interval_delta,
-                               self.init_interval_delta)
+
+        if self.old_init:
+            if self.box_type != 'SigmoidBoxTensor':
+                torch.nn.init.uniform_(
+                    self.weight[..., :self.box_embedding_dim],
+                    -self.init_interval_center, self.init_interval_center)
+                torch.nn.init.uniform_(
+                    self.weight[..., self.box_embedding_dim:],
+                    -self.init_interval_delta, self.init_interval_delta)
+            else:
+                torch.nn.init.uniform_(
+                    self.weight[..., :self.box_embedding_dim],
+                    -self.init_interval_center, self.init_interval_center)
+                torch.nn.init.uniform_(
+                    self.weight[..., self.box_embedding_dim:], -0.4,
+                    -0.4 + self.init_interval_delta)
         else:
-            torch.nn.init.uniform_(self.weight[..., :self.box_embedding_dim],
-                               -self.init_interval_center,
-                               self.init_interval_center)
-            torch.nn.init.uniform_(self.weight[..., self.box_embedding_dim:],
-                               -0.4,
-                               -0.4+self.init_interval_delta)
+            if self.box_type == 'SigmoidBoxTensor':
+                _uniform_init_using_minmax(self.weight, self.box_embedding_dim,
+                                           0.0 + 1e-7, 1.0 - 1e-7,
+                                           self.box_types[self.box_type])
 
     def __init__(
             self,
@@ -230,6 +248,7 @@ class BoxEmbedding(Embedding):
             sparse=sparse,
             vocab_namespace=vocab_namespace,
             pretrained_file=pretrained_file)
+        self.old_init = False
         self.box_type = box_type
         self.init_interval_delta = init_interval_delta
         self.init_interval_center = init_interval_center

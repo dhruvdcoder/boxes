@@ -618,6 +618,19 @@ class SigmoidBoxTensor(BoxTensor):
         return cls(box_val)
 
     @classmethod
+    def get_wW(cls, z, Z):
+        if z.shape != Z.shape:
+            raise ValueError(
+                "Shape of z and Z should be same but is {} and {}".format(
+                    z.shape, Z.shape))
+        eps = torch.finfo(z.dtype).tiny  # type: ignore
+        w = inv_sigmoid(z.clamp(eps, 1. - eps))
+        W = inv_sigmoid(((Z - z) / (1. - z)).clamp(eps,
+                                                   1. - eps))  # type:ignore
+
+        return w, W
+
+    @classmethod
     def from_split(cls: Type[TBoxTensor], t: Tensor,
                    dim: int = -1) -> TBoxTensor:
         """Creates a BoxTensor by splitting on the dimension dim at midpoint
@@ -832,6 +845,15 @@ class TanhActivatedCenterSideBoxTensor(TanhActivatedBoxTensor):
         raise NotImplementedError()
 
 
+def _softplus_inverse(t: torch.Tensor, beta=1.0, threshold=20):
+    below_thresh = beta * t < threshold
+    res = t
+    res[below_thresh] = torch.log(torch.exp(beta * t[below_thresh]) -
+                                  1.0) / beta
+
+    return res
+
+
 class DeltaBoxTensor(SigmoidBoxTensor):
     """Same as BoxTensor but with a different parameterization: (**,wW, num_dims)
 
@@ -846,9 +868,33 @@ class DeltaBoxTensor(SigmoidBoxTensor):
     @property
     def Z(self) -> Tensor:
         z = self.z
-        Z = z + torch.nn.functional.softplus(self.data[..., 1, :])
+        Z = z + torch.nn.functional.softplus(self.data[..., 1, :], beta=10)
 
         return Z
+
+    @classmethod
+    def from_zZ(cls: Type[TBoxTensor], z: Tensor, Z: Tensor) -> TBoxTensor:
+
+        if z.shape != Z.shape:
+            raise ValueError(
+                "Shape of z and Z should be same but is {} and {}".format(
+                    z.shape, Z.shape))
+        w, W = cls.get_wW(z, Z)  # type:ignore
+
+        box_val: Tensor = torch.stack((w, W), -2)
+
+        return cls(box_val)
+
+    @classmethod
+    def get_wW(cls, z, Z):
+        if z.shape != Z.shape:
+            raise ValueError(
+                "Shape of z and Z should be same but is {} and {}".format(
+                    z.shape, Z.shape))
+        w = z
+        W = _softplus_inverse(Z - z, beta=10.0)  # type:ignore
+
+        return w, W
 
 
 class MinDeltaBoxesOnTorus(SigmoidBoxTensor):
