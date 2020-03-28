@@ -174,6 +174,28 @@ def _uniform_init_using_minmax(weight, emb_dim, param1, param2, box_type):
         weight[..., emb_dim:] = W
 
 
+def _uniform_small(weight, emb_dim, param1, param2, box_type):
+    with torch.no_grad():
+        temp = torch.zeros_like(weight)
+        torch.nn.init.uniform_(temp, param1, param2)
+        z = torch.min(temp[..., :emb_dim], temp[..., emb_dim:])
+        Z = z + 0.001
+        w, W = box_type.get_wW(z, Z)
+        weight[..., :emb_dim] = w
+        weight[..., emb_dim:] = W
+
+
+def _uniform_big(weight, emb_dim, param1, param2, box_type):
+    with torch.no_grad():
+        temp = torch.zeros_like(weight)
+        torch.nn.init.uniform_(temp, 0 + 1e-7, 0.01)
+        z = torch.min(temp[..., :emb_dim], temp[..., emb_dim:])
+        Z = z + 0.9
+        w, W = box_type.get_wW(z, Z)
+        weight[..., :emb_dim] = w
+        weight[..., emb_dim:] = W
+
+
 class BoxEmbedding(Embedding):
     box_types = {
         'SigmoidBoxTensor': SigmoidBoxTensor,
