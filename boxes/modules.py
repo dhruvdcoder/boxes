@@ -229,10 +229,8 @@ class BoxEmbedding(Embedding):
                     self.weight[..., self.box_embedding_dim:], -0.4,
                     -0.4 + self.init_interval_delta)
         else:
-            if self.box_type == 'SigmoidBoxTensor':
-                _uniform_init_using_minmax(self.weight, self.box_embedding_dim,
-                                           0.0 + 1e-7, 1.0 - 1e-7,
-                                           self.box_types[self.box_type])
+            _uniform_big(self.weight, self.box_embedding_dim, 0.0 + 1e-7,
+                         1.0 - 1e-7, self.box_types[self.box_type])
 
     def __init__(
             self,
