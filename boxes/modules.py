@@ -177,9 +177,10 @@ def _uniform_init_using_minmax(weight, emb_dim, param1, param2, box_type):
 def _uniform_small(weight, emb_dim, param1, param2, box_type):
     with torch.no_grad():
         temp = torch.zeros_like(weight)
-        torch.nn.init.uniform_(temp, param1, param2)
-        z = torch.min(temp[..., :emb_dim], temp[..., emb_dim:])
-        Z = z + 0.001
+        torch.nn.init.uniform_(temp, 0.0 + 1e-7, 1.0 - 0.1 - 1e-7)
+        #z = torch.min(temp[..., :emb_dim], temp[..., emb_dim:])
+        z = temp[..., :emb_dim]
+        Z = z + 0.1
         w, W = box_type.get_wW(z, Z)
         weight[..., :emb_dim] = w
         weight[..., emb_dim:] = W
@@ -229,8 +230,8 @@ class BoxEmbedding(Embedding):
                     self.weight[..., self.box_embedding_dim:], -0.4,
                     -0.4 + self.init_interval_delta)
         else:
-            _uniform_big(self.weight, self.box_embedding_dim, 0.0 + 1e-7,
-                         1.0 - 1e-7, self.box_types[self.box_type])
+            _uniform_small(self.weight, self.box_embedding_dim, 0.0 + 1e-7,
+                           1.0 - 1e-7, self.box_types[self.box_type])
 
     def __init__(
             self,
