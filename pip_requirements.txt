@@ -58,7 +58,7 @@ nbformat==4.4.0
 neptune-client==0.2.12
 networkx==2.3
 ninja==1.9.0
-nltk==3.4.1
+nltk==3.4.5
 notebook==5.7.8
 ntplib==0.3.3
 numpy==1.16.3
