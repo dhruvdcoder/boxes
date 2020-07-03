@@ -95,6 +95,28 @@ def test_intersection():
     assert (res.data.numpy() == box1.intersection(box2).data.numpy()).all()
 
 
+def test_contains_violation():
+    box1 = BoxTensor(torch.tensor([[[1, 3], [2, 5]]]).float())
+    box2 = BoxTensor(torch.tensor([[[4, 2], [6, 4]]]).float())
+    res = box2.contains_violations(box1)
+    expected = torch.tensor([3]).float()
+    assert np.allclose(res.data.numpy(), expected.data.numpy())
+
+
+def test_does_not_contains_violation():
+    box1 = BoxTensor(torch.tensor([[[1, 3], [2, 5]]]).float())
+    box2 = BoxTensor(torch.tensor([[[4, 2], [6, 4]]]).float())
+    res = box2.does_not_contain_violations(box1)
+    expected = torch.tensor([0]).float()
+    assert np.allclose(res.data.numpy(), expected.data.numpy())
+
+    box1 = BoxTensor(torch.tensor([[[2, 2], [3, 3]]]).float())
+    box2 = BoxTensor(torch.tensor([[[1, 1], [5, 4]]]).float())
+    res = box2.does_not_contain_violations(box1)
+    expected = torch.tensor([1]).float()
+    assert np.allclose(res.data.numpy(), expected.data.numpy())
+
+
 def test_intersection_sigmoid_box():
     z1 = (torch.tensor([[1, 1], [1, 1]]).float()) / 6.
     Z1 = (torch.tensor([[3, 5], [2, 3]]).float()) / 6.
@@ -231,4 +253,5 @@ def test_broadcast_intersection():
 
 
 if __name__ == '__main__':
-    test_broadcast_intersection()
+    test_contains_violation()
+    test_does_not_contains_violation()
