@@ -1,0 +1,7 @@
+boxes.modules module
+====================
+
+.. automodule:: boxes.modules
+   :members:
+   :undoc-members:
+   :show-inheritance:

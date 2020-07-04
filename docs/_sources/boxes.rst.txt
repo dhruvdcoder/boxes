@@ -1,0 +1,20 @@
+boxes package
+=============
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   boxes.box_wrapper
+   boxes.modules
+   boxes.utils
+
+Module contents
+---------------
+
+.. automodule:: boxes
+   :members:
+   :undoc-members:
+   :show-inheritance:

@@ -1,0 +1,7 @@
+boxes.box\_wrapper module
+=========================
+
+.. automodule:: boxes.box_wrapper
+   :members:
+   :undoc-members:
+   :show-inheritance:

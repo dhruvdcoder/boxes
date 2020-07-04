@@ -1,0 +1,322 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>boxes.modules module &mdash; Box Embeddings  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/graphviz.css" type="text/css" />
+
+  
+  
+  
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="boxes.utils module" href="boxes.utils.html" />
+    <link rel="prev" title="boxes.box_wrapper module" href="boxes.box_wrapper.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home" alt="Documentation Home"> Box Embeddings
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Code Tree</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="boxes.html">boxes package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="boxes.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="boxes.box_wrapper.html">boxes.box_wrapper module</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">boxes.modules module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="boxes.utils.html">boxes.utils module</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="boxes.html#module-boxes">Module contents</a></li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Box Embeddings</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="boxes.html">boxes package</a> &raquo;</li>
+        
+      <li>boxes.modules module</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/boxes.modules.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-boxes.modules">
+<span id="boxes-modules-module"></span><h1>boxes.modules module<a class="headerlink" href="#module-boxes.modules" title="Permalink to this headline">¶</a></h1>
+<dl class="py class">
+<dt id="boxes.modules.BoxEmbedding">
+<em class="property">class </em><code class="sig-prename descclassname">boxes.modules.</code><code class="sig-name descname">BoxEmbedding</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">num_embeddings</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">box_embedding_dim</span><span class="p">:</span> <span class="n">int</span></em>, <em class="sig-param"><span class="n">box_type</span><span class="o">=</span><span class="default_value">'SigmoidBoxTensor'</span></em>, <em class="sig-param"><span class="n">weight</span><span class="p">:</span> <span class="n">torch.FloatTensor</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">padding_index</span><span class="p">:</span> <span class="n">int</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">trainable</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">True</span></em>, <em class="sig-param"><span class="n">max_norm</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">norm_type</span><span class="p">:</span> <span class="n">float</span> <span class="o">=</span> <span class="default_value">2.0</span></em>, <em class="sig-param"><span class="n">scale_grad_by_freq</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em>, <em class="sig-param"><span class="n">sparse</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em>, <em class="sig-param"><span class="n">vocab_namespace</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">pretrained_file</span><span class="p">:</span> <span class="n">str</span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">init_interval_center</span><span class="o">=</span><span class="default_value">0.25</span></em>, <em class="sig-param"><span class="n">init_interval_delta</span><span class="o">=</span><span class="default_value">0.1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#boxes.modules.BoxEmbedding" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">allennlp.modules.token_embedders.embedding.Embedding</span></code></p>
+<dl class="py method">
+<dt id="boxes.modules.BoxEmbedding.all_boxes">
+<em class="property">property </em><code class="sig-name descname">all_boxes</code><a class="headerlink" href="#boxes.modules.BoxEmbedding.all_boxes" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt id="boxes.modules.BoxEmbedding.box_types">
+<code class="sig-name descname">box_types</code><em class="property"> = {'BoxTensor': &lt;class 'boxes.box_wrapper.BoxTensor'&gt;, 'DeltaBoxTensor': &lt;class 'boxes.box_wrapper.DeltaBoxTensor'&gt;, 'MinDeltaBoxesOnTorus': &lt;class 'boxes.box_wrapper.MinDeltaBoxesOnTorus'&gt;, 'SigmoidBoxTensor': &lt;class 'boxes.box_wrapper.SigmoidBoxTensor'&gt;}</em><a class="headerlink" href="#boxes.modules.BoxEmbedding.box_types" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="boxes.modules.BoxEmbedding.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">inputs</span><span class="p">:</span> <span class="n">torch.LongTensor</span></em><span class="sig-paren">)</span><a class="headerlink" href="#boxes.modules.BoxEmbedding.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt id="boxes.modules.BoxEmbedding.get_bounding_box">
+<code class="sig-name descname">get_bounding_box</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="boxes.box_wrapper.html#boxes.box_wrapper.BoxTensor" title="boxes.box_wrapper.BoxTensor">boxes.box_wrapper.BoxTensor</a><a class="headerlink" href="#boxes.modules.BoxEmbedding.get_bounding_box" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="boxes.modules.BoxEmbedding.get_volumes">
+<code class="sig-name descname">get_volumes</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">temp</span><span class="p">:</span> <span class="n">Union<span class="p">[</span>float<span class="p">, </span>torch.Tensor<span class="p">]</span></span></em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#boxes.modules.BoxEmbedding.get_volumes" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="boxes.modules.BoxEmbedding.init_weights">
+<code class="sig-name descname">init_weights</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#boxes.modules.BoxEmbedding.init_weights" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="boxes.modules.LSTMBox">
+<em class="property">class </em><code class="sig-prename descclassname">boxes.modules.</code><code class="sig-name descname">LSTMBox</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="n">box_type</span><span class="o">=</span><span class="default_value">'SigmoidBoxes'</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="headerlink" href="#boxes.modules.LSTMBox" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.rnn.LSTM</span></code></p>
+<p>Module with standard lstm at the bottom but Boxes at the output</p>
+<dl class="py method">
+<dt id="boxes.modules.LSTMBox.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">inp</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">hx</span><span class="p">:</span> <span class="n">Optional<span class="p">[</span>Tuple<span class="p">[</span>torch.Tensor<span class="p">, </span>torch.Tensor<span class="p">]</span><span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; Tuple<span class="p">[</span>TBoxTensor<span class="p">, </span>Tuple<span class="p">[</span>torch.Tensor<span class="p">, </span>torch.Tensor<span class="p">]</span><span class="p">]</span><a class="headerlink" href="#boxes.modules.LSTMBox.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="boxes.modules.PytorchSeq2BoxWrapper">
+<em class="property">class </em><code class="sig-prename descclassname">boxes.modules.</code><code class="sig-name descname">PytorchSeq2BoxWrapper</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">module</span><span class="p">:</span> <span class="n">torch.nn.modules.rnn.RNNBase</span></em>, <em class="sig-param"><span class="n">box_type</span><span class="o">=</span><span class="default_value">'SigmoidBoxes'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#boxes.modules.PytorchSeq2BoxWrapper" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">allennlp.modules.seq2vec_encoders.pytorch_seq2vec_wrapper.PytorchSeq2VecWrapper</span></code></p>
+<p>AllenNLP compatible seq to box module</p>
+<dl class="py method">
+<dt id="boxes.modules.PytorchSeq2BoxWrapper.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">inp</span><span class="p">:</span> <span class="n">torch.Tensor</span></em>, <em class="sig-param"><span class="n">mask</span><span class="p">:</span> <span class="n">Optional<span class="p">[</span>torch.Tensor<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em>, <em class="sig-param"><span class="n">hidden_state</span><span class="p">:</span> <span class="n">Optional<span class="p">[</span>torch.Tensor<span class="p">]</span></span> <span class="o">=</span> <span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; str<a class="headerlink" href="#boxes.modules.PytorchSeq2BoxWrapper.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt id="boxes.modules.PytorchSeq2BoxWrapper.get_output_dim">
+<code class="sig-name descname">get_output_dim</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">after_box</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="default_value">False</span></em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#boxes.modules.PytorchSeq2BoxWrapper.get_output_dim" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt id="boxes.modules.mask_from_lens">
+<code class="sig-prename descclassname">boxes.modules.</code><code class="sig-name descname">mask_from_lens</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="headerlink" href="#boxes.modules.mask_from_lens" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="boxes.utils.html" class="btn btn-neutral float-right" title="boxes.utils module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="boxes.box_wrapper.html" class="btn btn-neutral float-left" title="boxes.box_wrapper module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        
+        &copy; Copyright 
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
